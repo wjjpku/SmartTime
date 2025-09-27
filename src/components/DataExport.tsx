@@ -31,6 +31,57 @@ const DataExport: React.FC<DataExportProps> = ({ tasks, onClose }) => {
     });
   };
 
+  // 创建支持中文的文本图片
+  const createTextImage = (text: string, fontSize: number = 12, fontWeight: string = 'normal'): Promise<string> => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      
+      // 设置高DPI支持
+      const dpr = window.devicePixelRatio || 1;
+      
+      // 设置字体 - 优先使用系统中文字体
+      const fontFamily = '"Microsoft YaHei", "SimHei", "SimSun", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Source Han Sans SC", "WenQuanYi Micro Hei", "Droid Sans Fallback", sans-serif';
+      ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+      
+      // 测量文本尺寸
+      const metrics = ctx.measureText(text);
+      const textWidth = Math.ceil(metrics.width);
+      const textHeight = fontSize * 1.2; // 增加行高以确保字符完整显示
+      
+      const width = textWidth + 20; // 增加左右边距
+      const height = textHeight + 10; // 增加上下边距
+      
+      // 设置画布尺寸（考虑高DPI）
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+      
+      // 缩放上下文以匹配设备像素比
+      ctx.scale(dpr, dpr);
+      
+      // 重新设置字体和样式
+      ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+      ctx.fillStyle = '#000000';
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+      
+      // 启用抗锯齿
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      
+      // 清除画布背景（透明）
+      ctx.clearRect(0, 0, width, height);
+      
+      // 绘制文本
+      ctx.fillText(text, 10, 5);
+      
+      // 转换为base64
+      resolve(canvas.toDataURL('image/png'));
+    });
+  };
+
   // 导出为PDF
   const exportToPDF = async () => {
     try {
@@ -39,55 +90,74 @@ const DataExport: React.FC<DataExportProps> = ({ tasks, onClose }) => {
       
       const pdf = new jsPDF();
       
-      // 设置字体（支持中文）
-      pdf.setFont('helvetica');
-      
       // 标题
-      pdf.setFontSize(20);
-      pdf.text('SmartTime Task Report', 20, 30);
+      const titleImg = await createTextImage('SmartTime 任务报告', 20, 'bold');
+      pdf.addImage(titleImg, 'PNG', 20, 20, 120, 15);
       
       // 日期范围
-      pdf.setFontSize(12);
-      pdf.text(`Export Date Range: ${dateRange.start} to ${dateRange.end}`, 20, 45);
-      pdf.text(`Total Tasks: ${filteredTasks.length}`, 20, 55);
+      const dateRangeImg = await createTextImage(`导出日期范围: ${dateRange.start} 至 ${dateRange.end}`, 12);
+      pdf.addImage(dateRangeImg, 'PNG', 20, 40, 150, 10);
+      
+      const totalTasksImg = await createTextImage(`任务总数: ${filteredTasks.length}`, 12);
+      pdf.addImage(totalTasksImg, 'PNG', 20, 55, 80, 10);
       
       // 任务列表
       let yPosition = 75;
-      pdf.setFontSize(10);
       
-      filteredTasks.forEach((task, index) => {
-        if (yPosition > 270) {
+      for (let i = 0; i < filteredTasks.length; i++) {
+        const task = filteredTasks[i];
+        
+        if (yPosition > 250) {
           pdf.addPage();
           yPosition = 30;
         }
         
         // 任务标题
-        pdf.setFont('helvetica', 'bold');
-        pdf.text(`${index + 1}. ${task.title}`, 20, yPosition);
-        yPosition += 10;
+        const taskTitleImg = await createTextImage(`${i + 1}. ${task.title}`, 12, 'bold');
+        pdf.addImage(taskTitleImg, 'PNG', 20, yPosition, 160, 10);
+        yPosition += 15;
         
         // 任务详情
-        pdf.setFont('helvetica', 'normal');
         const startTime = new Date(task.start).toLocaleString('zh-CN');
-        pdf.text(`Start: ${startTime}`, 25, yPosition);
-        yPosition += 8;
+        const startTimeImg = await createTextImage(`开始时间: ${startTime}`, 10);
+        pdf.addImage(startTimeImg, 'PNG', 25, yPosition, 140, 8);
+        yPosition += 12;
         
         if (task.end) {
           const endTime = new Date(task.end).toLocaleString('zh-CN');
-          pdf.text(`End: ${endTime}`, 25, yPosition);
-          yPosition += 8;
+          const endTimeImg = await createTextImage(`结束时间: ${endTime}`, 10);
+          pdf.addImage(endTimeImg, 'PNG', 25, yPosition, 140, 8);
+          yPosition += 12;
         }
         
-        pdf.text(`Priority: ${task.priority}`, 25, yPosition);
-        yPosition += 8;
+        const priorityText = task.priority === 'high' ? '高' : task.priority === 'medium' ? '中' : '低';
+        const priorityImg = await createTextImage(`优先级: ${priorityText}`, 10);
+        pdf.addImage(priorityImg, 'PNG', 25, yPosition, 60, 8);
+        yPosition += 12;
         
         if (task.description) {
-          pdf.text(`Description: ${task.description}`, 25, yPosition);
-          yPosition += 8;
+          // 处理长描述，分行显示
+          const maxLength = 50;
+          const lines = [];
+          let currentLine = '';
+          
+          for (let j = 0; j < task.description.length; j++) {
+            currentLine += task.description[j];
+            if (currentLine.length >= maxLength || j === task.description.length - 1) {
+              lines.push(currentLine);
+              currentLine = '';
+            }
+          }
+          
+          for (const line of lines) {
+            const descImg = await createTextImage(`描述: ${line}`, 10);
+            pdf.addImage(descImg, 'PNG', 25, yPosition, 160, 8);
+            yPosition += 12;
+          }
         }
         
-        yPosition += 5; // 任务间距
-      });
+        yPosition += 8; // 任务间距
+      }
       
       // 保存PDF
       const fileName = `smarttime-tasks-${dateRange.start}-to-${dateRange.end}.pdf`;
@@ -161,13 +231,48 @@ const DataExport: React.FC<DataExportProps> = ({ tasks, onClose }) => {
     }
   };
 
-  const handleExport = () => {
-    if (exportFormat === 'pdf') {
-      exportToPDF();
-    } else {
-      exportToExcel();
-    }
-  };
+  // 测试PDF中文显示
+   const testPDFChinese = async () => {
+     try {
+       setIsExporting(true);
+       const pdf = new jsPDF();
+       
+       // 测试各种中文字符
+       const testTexts = [
+         '测试标题：SmartTime 任务管理系统',
+         '中文字符测试：你好世界！',
+         '特殊字符：【重要】★高优先级★',
+         '数字混合：2024年1月15日 14:30',
+         '英文混合：Task Management System 任务管理',
+         '标点符号：，。！？；：""（）【】',
+         '繁体字测试：繁體中文測試內容',
+       ];
+       
+       let yPos = 30;
+       for (const text of testTexts) {
+         const img = await createTextImage(text, 12);
+         pdf.addImage(img, 'PNG', 20, yPos, 160, 10);
+         yPos += 20;
+       }
+       
+       pdf.save('chinese-test.pdf');
+       showSuccess('测试PDF生成成功', '请检查下载的chinese-test.pdf文件中的中文显示效果');
+       
+     } catch (error) {
+       console.error('测试PDF生成失败:', error);
+       showError('测试失败', '无法生成测试PDF文件');
+     } finally {
+       setIsExporting(false);
+     }
+   };
+
+   const handleExport = () => {
+     if (exportFormat === 'pdf') {
+       exportToPDF();
+     } else {
+       exportToExcel();
+     }
+   };
 
   const filteredTasksCount = getFilteredTasks().length;
 
@@ -271,6 +376,15 @@ const DataExport: React.FC<DataExportProps> = ({ tasks, onClose }) => {
           >
             取消
           </button>
+          {exportFormat === 'pdf' && (
+            <button
+              onClick={testPDFChinese}
+              disabled={isExporting}
+              className="px-4 py-2 text-orange-600 border border-orange-300 rounded-lg hover:bg-orange-50 transition-colors disabled:opacity-50 text-sm sm:text-base"
+            >
+              测试中文
+            </button>
+          )}
           <button
             onClick={handleExport}
             disabled={isExporting || filteredTasksCount === 0}

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Filter, X, Calendar, Star, Clock } from 'lucide-react';
-import { Task } from '../types/task';
+import { Task } from '../store/taskStore';
 
 interface TaskFilterProps {
   tasks: Task[];
   onFilteredTasks: (filteredTasks: Task[]) => void;
   isVisible: boolean;
   onToggle: () => void;
+  onClose?: () => void;
 }
 
 interface FilterOptions {
@@ -20,7 +21,8 @@ const TaskFilter: React.FC<TaskFilterProps> = ({
   tasks,
   onFilteredTasks,
   isVisible,
-  onToggle
+  onToggle,
+  onClose
 }) => {
   const [filters, setFilters] = useState<FilterOptions>({
     priority: [],

@@ -6,13 +6,15 @@ interface ReminderSettingsProps {
   isImportant: boolean;
   onReminderTypeChange: (type: string) => void;
   onImportantChange: (important: boolean) => void;
+  disabled?: boolean;
 }
 
 const ReminderSettings: React.FC<ReminderSettingsProps> = ({
   reminderType,
   isImportant,
   onReminderTypeChange,
-  onImportantChange
+  onImportantChange,
+  disabled = false
 }) => {
   const reminderOptions = [
     { value: 'none', label: '无提醒', icon: null },
@@ -35,7 +37,8 @@ const ReminderSettings: React.FC<ReminderSettingsProps> = ({
         <select
           value={reminderType}
           onChange={(e) => onReminderTypeChange(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          disabled={disabled}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {reminderOptions.map((option) => (
             <option key={option.value} value={option.value}>
@@ -52,7 +55,8 @@ const ReminderSettings: React.FC<ReminderSettingsProps> = ({
           id="important-task"
           checked={isImportant}
           onChange={(e) => onImportantChange(e.target.checked)}
-          className="w-4 h-4 text-red-600 bg-gray-100 border-gray-300 rounded focus:ring-red-500 focus:ring-2"
+          disabled={disabled}
+          className="w-4 h-4 text-red-600 bg-gray-100 border-gray-300 rounded focus:ring-red-500 focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed"
         />
         <label htmlFor="important-task" className="flex items-center text-sm font-medium text-gray-700">
           <AlertCircle className="w-4 h-4 mr-1 text-red-500" />

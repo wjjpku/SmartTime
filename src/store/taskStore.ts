@@ -39,6 +39,10 @@ export interface Task {
   parent_task_id?: string;
   created_at: string;
   updated_at: string;
+  description?: string;
+  reminder_type?: string;
+  is_important?: boolean;
+  reminder_sent?: boolean;
 }
 
 export interface TaskCreate {

@@ -24,7 +24,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'delete'>('create');
-  const [selectedTask, setSelectedTask] = useState(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
   const [createdTasks, setCreatedTasks] = useState<Task[]>([]);
   const [originalInputText, setOriginalInputText] = useState('');
@@ -409,10 +409,10 @@ export default function Home() {
     // 点击日期创建新任务
     setSelectedDate(new Date(dateClickInfo.dateStr));
     setSelectedTask({
-      start: dateClickInfo.date,
-      end: new Date(dateClickInfo.date.getTime() + 60 * 60 * 1000), // 默认1小时
+      start: dateClickInfo.date.toISOString(),
+      end: new Date(dateClickInfo.date.getTime() + 60 * 60 * 1000).toISOString(), // 默认1小时
       priority: 'medium'
-    });
+    } as Task);
     setModalMode('create');
     setShowModal(true);
   };
@@ -485,7 +485,7 @@ export default function Home() {
               </div>
               <div className="text-sm">
                 <p className="font-medium text-gray-800">
-                  {user?.user_metadata?.username || user?.email?.split('@')[0] || '用户'}
+                  {(user as any)?.user_metadata?.username || user?.email?.split('@')[0] || '用户'}
                 </p>
                 <p className="text-gray-500 text-xs">{user?.email}</p>
               </div>
@@ -502,10 +502,10 @@ export default function Home() {
               onClick={async () => {
                 try {
                   await signOut();
-                  toast.success('已成功登出');
+                  showSuccess('登出成功', '已成功登出');
                   navigate('/login');
                 } catch (error) {
-                  toast.error('登出失败，请重试');
+                  showError('登出失败', '登出失败，请重试');
                 }
               }}
               className="flex items-center gap-1 px-3 py-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
@@ -830,6 +830,8 @@ export default function Home() {
               tasks={tasks}
               onFilteredTasks={handleFilteredTasks}
               onClose={() => setShowFilter(false)}
+              isVisible={showFilter}
+              onToggle={toggleFilter}
             />
           </div>
         )}
@@ -918,7 +920,13 @@ export default function Home() {
       )}
 
       {/* 任务提醒组件 */}
-      <TaskReminder tasks={tasks} />
+      <TaskReminder 
+        tasks={tasks} 
+        onMarkReminderSent={(taskId) => {
+          // 标记提醒已发送
+          console.log('标记提醒已发送:', taskId);
+        }}
+      />
       
       {/* 用户引导 */}
       <UserGuide 

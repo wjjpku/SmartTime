@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF导出中文测试</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <h1>PDF导出中文测试</h1>
+    <button onclick="testPDFExport()">测试PDF导出</button>
+    
+    <script>
+        // 创建支持中文的文本图片
+        const createTextImage = (text, fontSize = 12, fontWeight = 'normal') => {
+            return new Promise((resolve) => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // 设置字体
+                ctx.font = `${fontWeight} ${fontSize}px "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", sans-serif`;
+                
+                // 测量文本尺寸
+                const metrics = ctx.measureText(text);
+                const width = Math.ceil(metrics.width) + 10;
+                const height = fontSize + 10;
+                
+                // 设置画布尺寸
+                canvas.width = width;
+                canvas.height = height;
+                
+                // 重新设置字体（画布尺寸改变后需要重新设置）
+                ctx.font = `${fontWeight} ${fontSize}px "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", sans-serif`;
+                ctx.fillStyle = '#000000';
+                ctx.textBaseline = 'top';
+                
+                // 绘制文本
+                ctx.fillText(text, 5, 5);
+                
+                // 转换为base64
+                resolve(canvas.toDataURL('image/png'));
+            });
+        };
+        
+        async function testPDFExport() {
+            try {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF();
+                
+                // 测试中文标题
+                const titleImg = await createTextImage('SmartTime 任务报告测试', 20, 'bold');
+                pdf.addImage(titleImg, 'PNG', 20, 20, 0, 0);
+                
+                // 测试中文内容
+                const contentImg = await createTextImage('这是一个中文内容测试：任务名称、开始时间、结束时间', 12);
+                pdf.addImage(contentImg, 'PNG', 20, 50, 0, 0);
+                
+                // 测试特殊字符
+                const specialImg = await createTextImage('特殊字符测试：①②③④⑤ ★☆♠♥♦♣', 12);
+                pdf.addImage(specialImg, 'PNG', 20, 80, 0, 0);
+                
+                // 保存PDF
+                pdf.save('中文测试.pdf');
+                
+                alert('PDF导出成功！请检查下载的文件中文显示是否正常。');
+            } catch (error) {
+                console.error('PDF导出失败:', error);
+                alert('PDF导出失败: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

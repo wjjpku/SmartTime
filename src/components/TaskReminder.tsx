@@ -8,9 +8,9 @@ interface Task {
   start: string;
   end?: string;
   priority: 'low' | 'medium' | 'high';
-  reminder_type: string;
-  is_important: boolean;
-  reminder_sent: boolean;
+  reminder_type?: string;
+  is_important?: boolean;
+  reminder_sent?: boolean;
 }
 
 interface TaskReminderProps {
