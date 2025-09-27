@@ -11,7 +11,7 @@ SmartTime - FastAPI 后端主入口
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import tasks, schedule
+from app.routes import tasks, schedule, auth
 
 # 创建 FastAPI 应用实例
 app = FastAPI(
@@ -39,6 +39,7 @@ app.add_middleware(
 # 注册路由
 app.include_router(tasks.router, prefix="/api", tags=["tasks"])
 app.include_router(schedule.router, prefix="/api", tags=["schedule"])
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 
 # 根路径健康检查
 @app.get("/")

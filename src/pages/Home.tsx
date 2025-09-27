@@ -10,7 +10,7 @@ import UnifiedTaskModal from '../components/UnifiedTaskModal';
 import TaskResultModal from '../components/TaskResultModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../components/NotificationManager';
-import TaskReminder from '../components/TaskReminder';
+// import TaskReminder from '../components/TaskReminder'; // 已禁用提醒功能
 import TaskFilter from '../components/TaskFilter';
 import DataExport from '../components/DataExport';
 import UserGuide from '../components/UserGuide';
@@ -524,15 +524,34 @@ export default function Home() {
               <label htmlFor="taskInput" className="text-lg font-semibold text-gray-700">
                 描述您的任务
               </label>
-              <textarea
-                id="taskInput"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder="例如：明天上午9点开会，下午写项目报告，周五下午3点和客户见面..."
-                className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                rows={4}
-                disabled={isLoading}
-              />
+              <div className="relative">
+                <textarea
+                  id="taskInput"
+                  value={inputText}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value.length <= 100) {
+                      setInputText(value);
+                    }
+                  }}
+                  placeholder="例如：明天上午9点开会，下午写项目报告，周五下午3点和客户见面..."
+                  className={`w-full p-4 border rounded-lg focus:ring-2 focus:border-transparent resize-none ${
+                    inputText.length >= 90 ? 'border-orange-300 focus:ring-orange-500' : 
+                    inputText.length === 100 ? 'border-red-300 focus:ring-red-500' : 
+                    'border-gray-300 focus:ring-blue-500'
+                  }`}
+                  rows={4}
+                  disabled={isLoading}
+                  maxLength={100}
+                />
+                <div className={`absolute bottom-2 right-2 text-xs ${
+                  inputText.length >= 90 ? 'text-orange-600' : 
+                  inputText.length === 100 ? 'text-red-600' : 
+                  'text-gray-400'
+                }`}>
+                  {inputText.length}/100
+                </div>
+              </div>
             </div>
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
               <button
@@ -919,14 +938,14 @@ export default function Home() {
         />
       )}
 
-      {/* 任务提醒组件 */}
-      <TaskReminder 
+      {/* 任务提醒组件 - 已禁用以避免401错误 */}
+      {/* <TaskReminder 
         tasks={tasks} 
         onMarkReminderSent={(taskId) => {
           // 标记提醒已发送
           console.log('标记提醒已发送:', taskId);
         }}
-      />
+      /> */}
       
       {/* 用户引导 */}
       <UserGuide 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, Trash2, Calendar, Clock, Flag, Repeat, Plus, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { taskStore, Task, TaskCreate, TaskUpdate, RecurrenceRule } from '../store/taskStore';
-import ReminderSettings from './ReminderSettings';
+// import ReminderSettings from './ReminderSettings'; // 已禁用提醒功能
 import { useNotification } from './NotificationManager';
 
 interface UnifiedTaskModalProps {
@@ -259,16 +259,35 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                 <label htmlFor="deleteInput" className="block text-sm font-medium text-red-700">
                   删除描述 *
                 </label>
-                <textarea
-                  id="deleteInput"
-                  value={deleteText}
-                  onChange={(e) => setDeleteText(e.target.value)}
-                  placeholder="例如：删除明天的会议，取消所有写报告的任务，删除不重要的任务..."
-                  className="w-full p-4 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
-                  rows={4}
-                  disabled={isLoading}
-                  required
-                />
+                <div className="relative">
+                  <textarea
+                    id="deleteInput"
+                    value={deleteText}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.length <= 100) {
+                        setDeleteText(value);
+                      }
+                    }}
+                    placeholder="例如：删除明天的会议，取消所有写报告的任务，删除不重要的任务..."
+                    className={`w-full p-4 border rounded-lg focus:ring-2 focus:border-transparent resize-none ${
+                      deleteText.length >= 90 ? 'border-orange-300 focus:ring-orange-500' : 
+                      deleteText.length === 100 ? 'border-red-300 focus:ring-red-500' : 
+                      'border-red-200 focus:ring-red-500'
+                    }`}
+                    rows={4}
+                    disabled={isLoading}
+                    maxLength={100}
+                    required
+                  />
+                  <div className={`absolute bottom-2 right-2 text-xs ${
+                    deleteText.length >= 90 ? 'text-orange-600' : 
+                    deleteText.length === 100 ? 'text-red-600' : 
+                    'text-gray-400'
+                  }`}>
+                    {deleteText.length}/100
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -281,16 +300,35 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                 <label htmlFor="title" className="block text-sm font-medium text-gray-700">
                   任务标题 *
                 </label>
-                <input
-                  type="text"
-                  id="title"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="输入任务标题"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  disabled={isLoading}
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    id="title"
+                    value={formData.title}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.length <= 100) {
+                        setFormData({ ...formData, title: value });
+                      }
+                    }}
+                    placeholder="输入任务标题"
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${
+                      formData.title.length >= 90 ? 'border-orange-300 focus:ring-orange-500' : 
+                      formData.title.length === 100 ? 'border-red-300 focus:ring-red-500' : 
+                      'border-gray-300 focus:ring-blue-500'
+                    }`}
+                    disabled={isLoading}
+                    maxLength={100}
+                    required
+                  />
+                  <div className={`absolute -bottom-5 right-0 text-xs ${
+                    formData.title.length >= 90 ? 'text-orange-600' : 
+                    formData.title.length === 100 ? 'text-red-600' : 
+                    'text-gray-400'
+                  }`}>
+                    {formData.title.length}/100
+                  </div>
+                </div>
               </div>
 
               {/* 开始时间 */}
@@ -352,14 +390,14 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                 </div>
               </div>
 
-              {/* 提醒设置 */}
-              <ReminderSettings
+              {/* 提醒设置 - 已禁用 */}
+              {/* <ReminderSettings
                 reminderType={formData.reminder_type}
                 isImportant={formData.is_important}
                 onReminderTypeChange={(type) => setFormData({ ...formData, reminder_type: type })}
                 onImportantChange={(important) => setFormData({ ...formData, is_important: important })}
                 disabled={isLoading}
-              />
+              /> */}
 
               {/* 重复任务设置 */}
               {!isEditing && (

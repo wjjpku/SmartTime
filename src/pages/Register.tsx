@@ -15,7 +15,7 @@ export default function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [agreeTerms, setAgreeTerms] = useState(false)
   const [loading, setLoading] = useState(false)
-  const { signUp } = useAuth()
+  const { signUp, signIn } = useAuth()
   const navigate = useNavigate()
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -115,8 +115,16 @@ export default function Register() {
           toast.error(error.message || '注册失败，请重试')
         }
       } else {
-        toast.success('注册成功！请检查您的邮箱进行验证')
-        navigate('/login')
+        // 注册成功后直接登录用户
+        const { error: signInError } = await signIn(formData.email, formData.password)
+        
+        if (signInError) {
+          toast.error('注册成功，但自动登录失败，请手动登录')
+          navigate('/login')
+        } else {
+          toast.success('注册成功！欢迎使用SmartTime')
+          navigate('/dashboard')
+        }
       }
     } catch (err) {
       toast.error('注册过程中发生错误')

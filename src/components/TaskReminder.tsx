@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Bell, X, Clock, AlertCircle, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
 
 interface Task {
   id: string;
@@ -37,10 +38,23 @@ const TaskReminder: React.FC<TaskReminderProps> = ({ tasks, onMarkReminderSent }
   // 从后端获取提醒任务
   const fetchReminderTasks = useCallback(async () => {
     try {
-      const response = await fetch('/api/tasks/reminders');
+      // 获取当前用户的session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        console.log('用户未登录，使用备用方案');
+        checkReminders();
+        return;
+      }
+
+      const response = await fetch('http://localhost:8000/api/tasks/reminders', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
       if (response.ok) {
-        const data = await response.json();
-        const pendingReminders = data.tasks || [];
+        const pendingReminders = await response.json();
         
         setNotifications(pendingReminders);
         
@@ -49,6 +63,9 @@ const TaskReminder: React.FC<TaskReminderProps> = ({ tasks, onMarkReminderSent }
           showNotification(task);
           onMarkReminderSent(task.id);
         });
+      } else {
+        console.error('获取提醒任务失败:', response.status);
+        checkReminders();
       }
     } catch (error) {
       console.error('获取提醒任务失败:', error);

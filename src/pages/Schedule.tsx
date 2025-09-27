@@ -218,12 +218,31 @@ const Schedule: React.FC = () => {
           </div>
           
           <div className="space-y-4">
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="请详细描述您的工作内容，包括：&#10;• 工作内容和预估时长&#10;• 截止日期（如有）&#10;• 时间偏好（如：上午、下午、安静环境等）&#10;&#10;例如：明天下午写一份项目报告，大概需要3小时"
-              className="w-full h-32 p-4 border border-gray-200 rounded-xl resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-            />
+            <div className="relative">
+              <textarea
+                value={description}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value.length <= 100) {
+                    setDescription(value);
+                  }
+                }}
+                placeholder="请详细描述您的工作内容，包括：&#10;• 工作内容和预估时长&#10;• 截止日期（如有）&#10;• 时间偏好（如：上午、下午、安静环境等）&#10;&#10;例如：明天下午写一份项目报告，大概需要3小时"
+                className={`w-full h-32 p-4 border rounded-xl resize-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
+                  description.length >= 90 ? 'border-orange-300 focus:ring-orange-500' : 
+                  description.length === 100 ? 'border-red-300 focus:ring-red-500' : 
+                  'border-gray-200 focus:ring-blue-500'
+                }`}
+                maxLength={100}
+              />
+              <div className={`absolute bottom-2 right-2 text-xs ${
+                description.length >= 90 ? 'text-orange-600' : 
+                description.length === 100 ? 'text-red-600' : 
+                'text-gray-400'
+              }`}>
+                {description.length}/100
+              </div>
+            </div>
             
             <button
               onClick={handleAnalyze}

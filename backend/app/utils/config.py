@@ -34,6 +34,17 @@ class Settings(BaseSettings):
     deepseek_api_url: str = "https://api.deepseek.com/v1/chat/completions"
     deepseek_model: str = "deepseek-chat"
     
+    # Supabase 配置
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_service_role_key: str = ""
+    supabase_jwt_secret: str = ""
+    
+    # JWT 配置
+    jwt_secret_key: str = "your-jwt-secret-key"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 30
+    
     # 数据存储配置
     data_dir: str = "data"
     tasks_file: str = "tasks.json"

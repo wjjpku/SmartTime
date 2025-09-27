@@ -201,6 +201,31 @@ class ReminderService:
             ReminderType.BEFORE_1DAY: "提前1天"
         }
         return display_map.get(reminder_type, "未知")
+    
+    async def get_reminder_tasks(self, user_id: str) -> List[Task]:
+        """获取需要提醒的任务"""
+        from .task_service import task_service
+        
+        # 获取用户的所有任务
+        all_tasks = await task_service.get_all_tasks(user_id)
+        
+        # 获取需要提醒的任务
+        reminder_tasks = self.get_pending_reminders(all_tasks)
+        
+        return reminder_tasks
+    
+    async def get_upcoming_tasks(self, days: int, user_id: str) -> List[Task]:
+        """获取即将到来的任务"""
+        from .task_service import task_service
+        
+        # 获取用户的所有任务
+        all_tasks = await task_service.get_all_tasks(user_id)
+        
+        # 获取即将到来的任务
+        upcoming_reminders = self.get_upcoming_reminders(all_tasks, days * 24)
+        
+        # 返回任务列表
+        return [reminder['task'] for reminder in upcoming_reminders]
 
 # 全局提醒服务实例
 reminder_service = ReminderService()

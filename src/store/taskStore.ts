@@ -1,5 +1,7 @@
-import { create } from 'zustand';
-import axios from 'axios';
+import { create } from 'zustand'
+import axios from 'axios'
+import { toast } from 'sonner'
+import { supabase } from '@/lib/supabase'
 
 // 重复规则接口定义
 export interface RecurrenceRule {
@@ -65,16 +67,32 @@ export interface TaskUpdate {
   parent_task_id?: string;
 }
 
-// API 基础配置
-const API_BASE_URL = '/api';
-
-// 创建 axios 实例
+// 配置axios实例
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: 'http://localhost:8000',
   headers: {
     'Content-Type': 'application/json',
   },
-});
+})
+
+// 请求拦截器：添加认证token
+api.interceptors.request.use(
+  async (config) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    console.log('[FRONTEND DEBUG] 获取到的session:', session)
+    if (session?.access_token) {
+      console.log('[FRONTEND DEBUG] 添加Authorization header:', `Bearer ${session.access_token.substring(0, 20)}...`)
+      config.headers.Authorization = `Bearer ${session.access_token}`
+    } else {
+      console.log('[FRONTEND DEBUG] 没有找到access_token')
+    }
+    return config
+  },
+  (error) => {
+    console.log('[FRONTEND DEBUG] 请求拦截器错误:', error)
+    return Promise.reject(error)
+  }
+)
 
 // 状态管理接口
 interface TaskStore {
@@ -104,7 +122,7 @@ export const taskStore = create<TaskStore>((set, get) => ({
   fetchTasks: async () => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.get('/tasks');
+      const response = await api.get('/api/tasks');
       set({ tasks: response.data.tasks, isLoading: false });
     } catch (error: any) {
       set({ 
@@ -119,7 +137,7 @@ export const taskStore = create<TaskStore>((set, get) => ({
   createTask: async (taskData: TaskCreate) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/tasks', taskData);
+      const response = await api.post('/api/tasks', taskData);
       const newTask = response.data.task;
       
       set(state => ({
@@ -141,7 +159,7 @@ export const taskStore = create<TaskStore>((set, get) => ({
   updateTask: async (id: string, taskData: TaskUpdate) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.put(`/tasks/${id}`, taskData);
+      const response = await api.put(`/api/tasks/${id}`, taskData);
       const updatedTask = response.data.task;
       
       set(state => ({
@@ -165,7 +183,7 @@ export const taskStore = create<TaskStore>((set, get) => ({
   deleteTask: async (id: string) => {
     set({ isLoading: true, error: null });
     try {
-      await api.delete(`/tasks/${id}`);
+      await api.delete(`/api/tasks/${id}`);
       
       set(state => ({
         tasks: state.tasks.filter(task => task.id !== id),
@@ -184,28 +202,18 @@ export const taskStore = create<TaskStore>((set, get) => ({
   batchDeleteTasks: async (type: 'day' | 'week' | 'month', date: Date) => {
     set({ isLoading: true, error: null });
     try {
-      // 使用本地日期时间，避免时区转换问题
-      const localDateTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0);
-      const response = await api.post(`/tasks/delete/${type}`, {
-        date: localDateTime.toISOString()
+      const response = await api.delete('/api/tasks/batch', { 
+        data: { type, date: date.toISOString() } 
       });
       
-      if (response.data.success) {
-        // 重新获取任务列表以确保数据同步
-        await get().fetchTasks();
-        
-        set({ isLoading: false });
-        return {
-          success: true,
-          deleted_count: response.data.deleted_count,
-          message: response.data.message
-        };
-      } else {
-        throw new Error(response.data.error || '批量删除失败');
-      }
+      // 重新获取任务列表
+      await get().fetchTasks();
+      
+      set({ isLoading: false });
+      return response.data;
     } catch (error: any) {
       set({ 
-        error: error.response?.data?.detail || error.message || '批量删除失败', 
+        error: error.response?.data?.detail || '批量删除任务失败', 
         isLoading: false 
       });
       throw error;
@@ -216,23 +224,13 @@ export const taskStore = create<TaskStore>((set, get) => ({
   parseAndCreateTasks: async (text: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/tasks/parse', { text });
+      const response = await api.post('/api/schedule/parse', { text });
       
-      if (response.data.success) {
-        const newTasks = response.data.tasks;
-        
-        set(state => ({
-          tasks: [...state.tasks, ...newTasks],
-          isLoading: false
-        }));
-        
-        return newTasks;
-      } else {
-        throw new Error(response.data.error || '解析任务失败');
-      }
+      set({ isLoading: false });
+      return response.data;
     } catch (error: any) {
       set({ 
-        error: error.response?.data?.detail || error.message || '解析任务失败', 
+        error: error.response?.data?.detail || '解析任务失败', 
         isLoading: false 
       });
       throw error;
@@ -240,53 +238,36 @@ export const taskStore = create<TaskStore>((set, get) => ({
   },
 
   // 分析智能日程安排
-  analyzeSchedule: async (description: string) => {
+  analyzeSchedule: async (text: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/schedule/analyze', { description });
+      const response = await api.post('/api/schedule/analyze', { text });
       
-      if (response.data.success) {
-        set({ isLoading: false });
-        return {
-          work_info: response.data.work_info,
-          recommendations: response.data.recommendations
-        };
-      } else {
-        throw new Error(response.data.error || '分析日程失败');
-      }
+      set({ isLoading: false });
+      return response.data;
     } catch (error: any) {
       set({ 
-        error: error.response?.data?.detail || error.message || '分析日程失败', 
+        error: error.response?.data?.detail || '分析日程失败', 
         isLoading: false 
       });
       throw error;
     }
   },
 
-  // 确认日程安排
-  confirmSchedule: async (work_info: WorkInfo, selected_slot: TimeSlot) => {
+  // 确认并创建日程
+  confirmSchedule: async (tasks: any[]) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/schedule/confirm', { 
-        work_info, 
-        selected_slot 
-      });
+      const response = await api.post('/api/schedule/confirm', { tasks });
       
-      if (response.data.success) {
-        const newTask = response.data.task;
-        
-        set(state => ({
-          tasks: [...state.tasks, newTask],
-          isLoading: false
-        }));
-        
-        return newTask;
-      } else {
-        throw new Error(response.data.error || '确认日程失败');
-      }
+      // 重新获取任务列表
+      await get().fetchTasks();
+      
+      set({ isLoading: false });
+      return response.data;
     } catch (error: any) {
       set({ 
-        error: error.response?.data?.detail || error.message || '确认日程失败', 
+        error: error.response?.data?.detail || '确认日程失败', 
         isLoading: false 
       });
       throw error;

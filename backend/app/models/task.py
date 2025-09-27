@@ -45,7 +45,7 @@ class ReminderType(str, Enum):
 
 class TaskBase(BaseModel):
     """任务基础模型"""
-    title: str = Field(..., min_length=1, max_length=200, description="任务标题")
+    title: str = Field(..., min_length=1, max_length=100, description="任务标题")
     start: datetime = Field(..., description="开始时间（ISO 8601格式）")
     end: Optional[datetime] = Field(None, description="结束时间（ISO 8601格式，可选）")
     priority: Optional[TaskPriority] = Field(TaskPriority.MEDIUM, description="任务优先级")
@@ -62,7 +62,7 @@ class TaskCreate(TaskBase):
 
 class TaskUpdate(BaseModel):
     """更新任务请求模型"""
-    title: Optional[str] = Field(None, min_length=1, max_length=200, description="任务标题")
+    title: Optional[str] = Field(None, min_length=1, max_length=100, description="任务标题")
     start: Optional[datetime] = Field(None, description="开始时间（ISO 8601格式）")
     end: Optional[datetime] = Field(None, description="结束时间（ISO 8601格式）")
     priority: Optional[TaskPriority] = Field(None, description="任务优先级")
@@ -83,7 +83,7 @@ class Task(TaskBase):
 
 class TaskParseRequest(BaseModel):
     """自然语言任务解析请求模型"""
-    text: str = Field(..., min_length=1, max_length=1000, description="用户输入的自然语言任务描述")
+    text: str = Field(..., min_length=1, max_length=100, description="用户输入的自然语言任务描述")
 
 class TaskParseResponse(BaseModel):
     """自然语言任务解析响应模型"""
@@ -107,8 +107,8 @@ class DeleteResponse(BaseModel):
 
 class WorkInfo(BaseModel):
     """工作信息模型"""
-    title: str = Field(..., min_length=1, max_length=200, description="工作标题")
-    description: str = Field(..., min_length=1, max_length=1000, description="工作描述")
+    title: str = Field(..., min_length=1, max_length=100, description="工作标题")
+    description: str = Field(..., min_length=1, max_length=100, description="工作描述")
     duration_hours: float = Field(..., gt=0, le=24, description="预估工作时长（小时）")
     deadline: Optional[datetime] = Field(None, description="截止日期（ISO 8601格式）")
     priority: Optional[TaskPriority] = Field(TaskPriority.MEDIUM, description="任务优先级")
@@ -119,11 +119,11 @@ class TimeSlot(BaseModel):
     start: datetime = Field(..., description="开始时间（ISO 8601格式）")
     end: datetime = Field(..., description="结束时间（ISO 8601格式）")
     score: int = Field(..., ge=0, le=100, description="推荐分数（0-100）")
-    reason: str = Field(..., min_length=1, max_length=500, description="推荐理由")
+    reason: str = Field(..., min_length=1, max_length=100, description="推荐理由")
 
 class ScheduleAnalyzeRequest(BaseModel):
     """智能日程分析请求模型"""
-    description: str = Field(..., min_length=1, max_length=1000, description="工作描述，包含截止日期、时长、偏好等")
+    description: str = Field(..., min_length=1, max_length=100, description="工作描述，包含截止日期、时长、偏好等")
 
 class ScheduleAnalyzeResponse(BaseModel):
     """智能日程分析响应模型"""
@@ -145,7 +145,7 @@ class ScheduleConfirmResponse(BaseModel):
 
 class TaskDeleteRequest(BaseModel):
     """自然语言任务删除请求模型"""
-    description: str = Field(..., min_length=1, max_length=500, description="用户输入的删除描述，如：删除明天的会议、取消下午的任务等")
+    description: str = Field(..., min_length=1, max_length=100, description="用户输入的删除描述，如：删除明天的会议、取消下午的任务等")
 
 class TaskDeleteResponse(BaseModel):
     """自然语言任务删除响应模型"""

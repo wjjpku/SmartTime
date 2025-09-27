@@ -64,6 +64,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signUp = async (email: string, password: string, username: string) => {
+    // 注意：这里只创建用户账户，不发送Supabase的确认邮件
+    // 邮箱验证通过我们自定义的验证码系统处理
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -71,6 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         data: {
           username,
         },
+        emailRedirectTo: undefined, // 禁用邮件重定向
       },
     })
     return { error }

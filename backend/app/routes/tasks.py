@@ -13,7 +13,7 @@
 
 from datetime import datetime, timedelta
 from typing import List
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Query
 from app.models import (
     Task, TaskCreate, TaskUpdate, TaskParseRequest, TaskParseResponse,
     TaskListResponse, TaskResponse, DeleteResponse, TaskDeleteRequest, TaskDeleteResponse,
@@ -22,6 +22,7 @@ from app.models import (
 from app.services.task_service import TaskService
 from app.services.deepseek_service import DeepSeekService
 from app.services.reminder_service import ReminderService
+from app.middleware.auth import get_current_user_id
 from app.utils.config import get_settings
 import logging
 
@@ -36,7 +37,7 @@ deepseek_service = DeepSeekService(get_settings())
 reminder_service = ReminderService()
 
 @router.post("/tasks/parse", response_model=TaskParseResponse)
-async def parse_tasks(request: TaskParseRequest):
+async def parse_tasks(request: TaskParseRequest, user_id: str = Depends(get_current_user_id)):
     """
     自然语言任务解析接口
     
@@ -49,7 +50,7 @@ async def parse_tasks(request: TaskParseRequest):
         # 保存解析出的任务到本地存储
         saved_tasks = []
         for task_data in parsed_tasks:
-            task = await task_service.create_task(task_data)
+            task = await task_service.create_task(task_data, user_id)
             saved_tasks.append(task)
         
         return TaskParseResponse(
@@ -65,12 +66,12 @@ async def parse_tasks(request: TaskParseRequest):
         )
 
 @router.get("/tasks", response_model=TaskListResponse)
-async def get_all_tasks():
+async def get_all_tasks(user_id: str = Depends(get_current_user_id)):
     """
-    获取所有任务列表
+    获取当前用户的所有任务列表
     """
     try:
-        tasks = await task_service.get_all_tasks()
+        tasks = await task_service.get_all_tasks(user_id)
         return TaskListResponse(
             tasks=tasks,
             total=len(tasks)
@@ -82,12 +83,12 @@ async def get_all_tasks():
         )
 
 @router.get("/tasks/{task_id}", response_model=TaskResponse)
-async def get_task(task_id: str):
+async def get_task(task_id: str, user_id: str = Depends(get_current_user_id)):
     """
     获取单个任务详情
     """
     try:
-        task = await task_service.get_task_by_id(task_id)
+        task = await task_service.get_task_by_id(task_id, user_id)
         if not task:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -103,13 +104,13 @@ async def get_task(task_id: str):
         )
 
 @router.put("/tasks/{task_id}", response_model=TaskResponse)
-async def update_task(task_id: str, task_update: TaskUpdate):
+async def update_task(task_id: str, task_update: TaskUpdate, user_id: str = Depends(get_current_user_id)):
     """
     更新任务信息
     """
     try:
         # 检查任务是否存在
-        existing_task = await task_service.get_task_by_id(task_id)
+        existing_task = await task_service.get_task_by_id(task_id, user_id)
         if not existing_task:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -117,7 +118,7 @@ async def update_task(task_id: str, task_update: TaskUpdate):
             )
         
         # 更新任务
-        updated_task = await task_service.update_task(task_id, task_update)
+        updated_task = await task_service.update_task(task_id, task_update, user_id)
         return TaskResponse(task=updated_task)
     
     except HTTPException:
@@ -129,13 +130,13 @@ async def update_task(task_id: str, task_update: TaskUpdate):
         )
 
 @router.delete("/tasks/{task_id}", response_model=DeleteResponse)
-async def delete_task(task_id: str):
+async def delete_task(task_id: str, user_id: str = Depends(get_current_user_id)):
     """
     删除任务
     """
     try:
         # 检查任务是否存在
-        existing_task = await task_service.get_task_by_id(task_id)
+        existing_task = await task_service.get_task_by_id(task_id, user_id)
         if not existing_task:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -143,7 +144,7 @@ async def delete_task(task_id: str):
             )
         
         # 删除任务
-        success = await task_service.delete_task(task_id)
+        success = await task_service.delete_task(task_id, user_id)
         
         if success:
             return DeleteResponse(
@@ -165,19 +166,52 @@ async def delete_task(task_id: str):
         )
 
 @router.post("/tasks", response_model=TaskResponse)
-async def create_task_direct(task: TaskCreate):
+async def create_task_direct(task: TaskCreate, user_id: str = Depends(get_current_user_id)):
     """
     直接创建任务接口
     
     直接根据提供的任务数据创建任务，不进行自然语言解析
     """
     try:
-        created_task = await task_service.create_task(task)
+        created_task = await task_service.create_task(task, user_id)
         return TaskResponse(task=created_task)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"创建任务失败: {str(e)}"
+        )
+
+@router.delete("/tasks/description/{description}", response_model=TaskResponse)
+async def delete_task_by_description(description: str, user_id: str = Depends(get_current_user_id)):
+    """根据任务描述删除任务"""
+    try:
+        # 获取所有任务
+        all_tasks = await task_service.get_all_tasks(user_id)
+        
+        # 查找匹配的任务
+        task_to_delete = None
+        for task in all_tasks:
+            if task.description == description:
+                task_to_delete = task
+                break
+        
+        if not task_to_delete:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"未找到描述为 '{description}' 的任务"
+            )
+        
+        # 删除任务
+        deleted_task = await task_service.delete_task(task_to_delete.id, user_id)
+        return TaskResponse(task=deleted_task)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"根据描述删除任务失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"删除任务失败: {str(e)}"
         )
 
 @router.delete("/by-description", response_model=TaskDeleteResponse)
@@ -205,10 +239,10 @@ async def delete_tasks_by_description(request: TaskDeleteRequest):
 
 
 @router.post("/tasks/delete/day", response_model=BatchDeleteResponse)
-async def delete_tasks_by_day(request: BatchDeleteRequest):
+async def delete_tasks_by_day(request: BatchDeleteRequest, user_id: str = Depends(get_current_user_id)):
     """删除指定日期的所有任务"""
     try:
-        deleted_tasks = await task_service.delete_tasks_by_day(request.date)
+        deleted_tasks = await task_service.delete_tasks_by_day(request.date, user_id)
         
         return BatchDeleteResponse(
             success=True,
@@ -228,10 +262,10 @@ async def delete_tasks_by_day(request: BatchDeleteRequest):
 
 
 @router.post("/tasks/delete/week", response_model=BatchDeleteResponse)
-async def delete_tasks_by_week(request: BatchDeleteRequest):
+async def delete_tasks_by_week(request: BatchDeleteRequest, user_id: str = Depends(get_current_user_id)):
     """删除指定日期所在周的所有任务"""
     try:
-        deleted_tasks = await task_service.delete_tasks_by_week(request.date)
+        deleted_tasks = await task_service.delete_tasks_by_week(request.date, user_id)
         
         # 计算周的范围用于显示
         days_since_monday = request.date.weekday()
@@ -256,10 +290,10 @@ async def delete_tasks_by_week(request: BatchDeleteRequest):
 
 
 @router.post("/tasks/delete/month", response_model=BatchDeleteResponse)
-async def delete_tasks_by_month(request: BatchDeleteRequest):
+async def delete_tasks_by_month(request: BatchDeleteRequest, user_id: str = Depends(get_current_user_id)):
     """删除指定日期所在月的所有任务"""
     try:
-        deleted_tasks = await task_service.delete_tasks_by_month(request.date)
+        deleted_tasks = await task_service.delete_tasks_by_month(request.date, user_id)
         
         return BatchDeleteResponse(
             success=True,
@@ -278,42 +312,28 @@ async def delete_tasks_by_month(request: BatchDeleteRequest):
         )
 
 
-@router.get("/tasks/reminders", response_model=TaskListResponse)
-async def get_reminder_tasks():
+@router.get("/tasks/reminders", response_model=List[Task])
+async def get_reminder_tasks(user_id: str = Depends(get_current_user_id)):
     """获取需要提醒的任务"""
     try:
-        # 获取所有任务
-        all_tasks = await task_service.get_all_tasks()
-        
-        # 获取需要提醒的任务
-        reminder_tasks = reminder_service.get_pending_reminders(all_tasks)
-        
-        return TaskListResponse(
-            tasks=reminder_tasks,
-            total=len(reminder_tasks)
-        )
+        reminder_tasks = await reminder_service.get_reminder_tasks(user_id)
+        return reminder_tasks
     except Exception as e:
+        logger.error(f"获取提醒任务失败: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取提醒任务失败: {str(e)}"
         )
 
 
-@router.get("/tasks/upcoming", response_model=TaskListResponse)
-async def get_upcoming_tasks():
+@router.get("/tasks/upcoming", response_model=List[Task])
+async def get_upcoming_tasks(days: int = Query(7, description="未来天数"), user_id: str = Depends(get_current_user_id)):
     """获取即将到来的任务"""
     try:
-        # 获取所有任务
-        all_tasks = await task_service.get_all_tasks()
-        
-        # 获取即将到来的任务
-        upcoming_tasks = reminder_service.get_upcoming_reminders(all_tasks)
-        
-        return TaskListResponse(
-            tasks=upcoming_tasks,
-            total=len(upcoming_tasks)
-        )
+        upcoming_tasks = await reminder_service.get_upcoming_tasks(days, user_id)
+        return upcoming_tasks
     except Exception as e:
+        logger.error(f"获取即将到来的任务失败: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取即将到来的任务失败: {str(e)}"
