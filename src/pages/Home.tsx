@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Plus, Send, Loader2, Zap } from 'lucide-react';
+import { Calendar, Plus, Send, Loader2, Zap, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -14,7 +14,9 @@ import TaskResultModal from '../components/TaskResultModal';
 export default function Home() {
   const navigate = useNavigate();
   const [inputText, setInputText] = useState('');
+  const [deleteText, setDeleteText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [showResultModal, setShowResultModal] = useState(false);
@@ -53,6 +55,47 @@ export default function Home() {
       toast.error('创建任务失败，请重试');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDelete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deleteText.trim()) {
+      toast.error('请输入要删除的任务描述');
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch('/api/tasks/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          description: deleteText
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('删除任务失败');
+      }
+      
+      const result = await response.json();
+      setDeleteText('');
+      
+      // 刷新任务列表
+      await fetchTasks();
+      
+      if (result.deleted_count > 0) {
+        toast.success(`成功删除了 ${result.deleted_count} 个任务！`);
+      } else {
+        toast.info('没有找到匹配的任务');
+      }
+    } catch (error) {
+      toast.error('删除任务失败，请重试');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -111,7 +154,7 @@ export default function Home() {
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-800 mb-2 flex items-center justify-center gap-3">
             <Calendar className="text-blue-600" size={40} />
-            智能任务管理系统
+            SmartTime
           </h1>
           <p className="text-gray-600 text-lg">用自然语言描述您的任务，AI 将自动为您安排日程</p>
         </div>
@@ -164,6 +207,41 @@ export default function Home() {
                   {isLoading ? '解析中...' : 'AI 解析任务'}
                 </button>
               </div>
+            </div>
+          </form>
+        </div>
+
+        {/* 删除任务区域 */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border-l-4 border-red-500">
+          <form onSubmit={handleDelete} className="space-y-4">
+            <div className="flex flex-col space-y-4">
+              <label htmlFor="deleteInput" className="text-lg font-semibold text-red-700 flex items-center gap-2">
+                <Trash2 size={20} />
+                删除任务
+              </label>
+              <textarea
+                id="deleteInput"
+                value={deleteText}
+                onChange={(e) => setDeleteText(e.target.value)}
+                placeholder="例如：删除明天的会议，取消所有写报告的任务，删除不重要的任务..."
+                className="w-full p-4 border border-red-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+                rows={3}
+                disabled={isDeleting}
+              />
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={isDeleting || !deleteText.trim()}
+                className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                {isDeleting ? (
+                  <Loader2 className="animate-spin" size={20} />
+                ) : (
+                  <Trash2 size={20} />
+                )}
+                {isDeleting ? '删除中...' : 'AI 智能删除'}
+              </button>
             </div>
           </form>
         </div>

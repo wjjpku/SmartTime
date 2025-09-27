@@ -21,6 +21,11 @@ class TaskService:
         self.data_file = Path(data_file)
         self.data_file.parent.mkdir(parents=True, exist_ok=True)
         
+        # 添加缓存机制
+        self._cache = None
+        self._cache_timestamp = None
+        self._cache_ttl = 30  # 缓存30秒
+        
         # 如果数据文件不存在，创建初始结构
         if not self.data_file.exists():
             self._init_data_file()
@@ -53,6 +58,10 @@ class TaskService:
         
         with open(self.data_file, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        
+        # 清除缓存，因为数据已更改
+        self._cache = None
+        self._cache_timestamp = None
     
     def _generate_task_id(self) -> str:
         """生成唯一的任务ID"""
@@ -260,7 +269,15 @@ class TaskService:
         return task
     
     async def get_all_tasks(self) -> List[Task]:
-        """获取所有任务"""
+        """获取所有任务（带缓存优化）"""
+        # 检查缓存是否有效
+        current_time = datetime.now()
+        if (self._cache is not None and 
+            self._cache_timestamp is not None and 
+            (current_time - self._cache_timestamp).total_seconds() < self._cache_ttl):
+            return self._cache
+        
+        # 缓存失效，重新加载数据
         data = self._load_data()
         tasks = []
         
@@ -281,6 +298,11 @@ class TaskService:
             return start_time
         
         tasks.sort(key=get_sort_key)
+        
+        # 更新缓存
+        self._cache = tasks
+        self._cache_timestamp = current_time
+        
         return tasks
     
     async def get_task_by_id(self, task_id: str) -> Optional[Task]:

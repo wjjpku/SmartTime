@@ -25,7 +25,12 @@ app = FastAPI(
 # 配置 CORS 中间件，允许前端跨域访问
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # Vite 默认端口
+    allow_origins=[
+        "http://localhost:5173", 
+        "http://127.0.0.1:5173",  # 本地开发
+        "https://traedduqw5r8-wjjpku-justin-wus-projects-e244beee.vercel.app",  # Vercel 部署域名
+        "https://*.vercel.app"  # 所有 Vercel 域名
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

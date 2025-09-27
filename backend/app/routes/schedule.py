@@ -53,7 +53,7 @@ async def analyze_schedule(request: ScheduleAnalyzeRequest):
             existing_tasks_dict.append(task_dict)
         
         # 调用 DeepSeek 服务进行智能分析
-        work_info, time_slots = await deepseek_service.analyze_schedule(request.description, existing_tasks)
+        work_info, time_slots = await deepseek_service.analyze_schedule(request.description, existing_tasks_dict)
         
         return ScheduleAnalyzeResponse(
             success=True,

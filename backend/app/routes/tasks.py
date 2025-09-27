@@ -21,7 +21,9 @@ from app.models import (
     TaskParseResponse,
     TaskListResponse,
     TaskResponse,
-    DeleteResponse
+    DeleteResponse,
+    TaskDeleteRequest,
+    TaskDeleteResponse
 )
 from app.services.task_service import TaskService
 from app.services.deepseek_service import DeepSeekService
@@ -164,15 +166,87 @@ async def delete_task(task_id: str):
         )
 
 @router.post("/tasks", response_model=TaskResponse)
-async def create_task(task_create: TaskCreate):
+async def create_task_direct(task: TaskCreate):
     """
-    直接创建任务（不通过自然语言解析）
+    直接创建任务接口
+    
+    直接根据提供的任务数据创建任务，不进行自然语言解析
     """
     try:
-        task = await task_service.create_task(task_create)
-        return TaskResponse(task=task)
+        created_task = await task_service.create_task(task)
+        return TaskResponse(task=created_task)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"创建任务失败: {str(e)}"
+        )
+
+@router.post("/tasks/delete", response_model=TaskDeleteResponse)
+async def delete_tasks_by_description(request: TaskDeleteRequest):
+    """
+    自然语言删除任务接口
+    
+    根据用户的自然语言描述智能匹配并删除相关任务
+    """
+    try:
+        # 获取所有现有任务
+        existing_tasks = await task_service.get_all_tasks()
+        
+        if not existing_tasks:
+            return TaskDeleteResponse(
+                success=False,
+                deleted_tasks=[],
+                message="没有找到任何任务",
+                error="任务列表为空"
+            )
+        
+        # 调用 DeepSeek 服务进行智能匹配
+        from app.services.deepseek_service import DeepSeekService
+        from app.utils.config import get_settings
+        
+        deepseek_service = DeepSeekService(get_settings())
+        matched_task_ids = await deepseek_service.match_tasks_for_deletion(request.description, existing_tasks)
+        
+        if not matched_task_ids:
+            return TaskDeleteResponse(
+                success=False,
+                deleted_tasks=[],
+                message="没有找到匹配的任务",
+                error="根据描述未能匹配到任何任务"
+            )
+        
+        # 删除匹配的任务
+        deleted_tasks = []
+        for task_id in matched_task_ids:
+            try:
+                # 获取任务详情
+                task = await task_service.get_task_by_id(task_id)
+                if task:
+                    deleted_tasks.append(task)
+                    # 删除任务
+                    await task_service.delete_task(task_id)
+            except Exception as e:
+                print(f"删除任务 {task_id} 时出错: {str(e)}")
+                continue
+        
+        if deleted_tasks:
+            return TaskDeleteResponse(
+                success=True,
+                deleted_tasks=deleted_tasks,
+                message=f"成功删除 {len(deleted_tasks)} 个任务"
+            )
+        else:
+            return TaskDeleteResponse(
+                success=False,
+                deleted_tasks=[],
+                message="删除操作失败",
+                error="无法删除匹配的任务"
+            )
+    
+    except Exception as e:
+        return TaskDeleteResponse(
+            success=False,
+            deleted_tasks=[],
+            message="删除任务时发生错误",
+            error=str(e)
         )

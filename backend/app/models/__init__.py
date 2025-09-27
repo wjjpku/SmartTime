@@ -15,6 +15,8 @@ from .task import (
     TaskListResponse,
     TaskResponse,
     DeleteResponse,
+    TaskDeleteRequest,
+    TaskDeleteResponse,
     RecurrenceRule,
     RecurrenceFrequency
 )
@@ -30,6 +32,8 @@ __all__ = [
     "TaskListResponse",
     "TaskResponse",
     "DeleteResponse",
+    "TaskDeleteRequest",
+    "TaskDeleteResponse",
     "RecurrenceRule",
     "RecurrenceFrequency"
 ]

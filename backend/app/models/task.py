@@ -127,3 +127,14 @@ class ScheduleConfirmResponse(BaseModel):
     success: bool = Field(..., description="创建是否成功")
     task: Optional[Task] = Field(None, description="创建的任务对象")
     error: Optional[str] = Field(None, description="错误信息（创建失败时）")
+
+class TaskDeleteRequest(BaseModel):
+    """自然语言任务删除请求模型"""
+    description: str = Field(..., min_length=1, max_length=500, description="用户输入的删除描述，如：删除明天的会议、取消下午的任务等")
+
+class TaskDeleteResponse(BaseModel):
+    """自然语言任务删除响应模型"""
+    success: bool = Field(..., description="删除是否成功")
+    deleted_tasks: List[Task] = Field(default=[], description="被删除的任务列表")
+    message: str = Field(..., description="操作结果消息")
+    error: Optional[str] = Field(None, description="错误信息（删除失败时）")

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Calendar, Clock, Brain, CheckCircle, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Brain, Calendar, Clock, CheckCircle, AlertCircle, X, Home, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface WorkInfo {
@@ -32,6 +33,7 @@ interface ConfirmResponse {
 }
 
 const Schedule: React.FC = () => {
+  const navigate = useNavigate();
   const [description, setDescription] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -46,6 +48,13 @@ const Schedule: React.FC = () => {
     }
 
     setIsAnalyzing(true);
+    
+    // 创建超时控制器
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 15000); // 15秒超时
+
     try {
       const response = await fetch('/api/schedule/analyze', {
         method: 'POST',
@@ -53,7 +62,14 @@ const Schedule: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ description }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`服务器错误: ${response.status}`);
+      }
 
       const data: AnalyzeResponse = await response.json();
       
@@ -64,9 +80,18 @@ const Schedule: React.FC = () => {
       } else {
         toast.error(data.error || '分析失败，请重试');
       }
-    } catch (error) {
-      console.error('分析失败:', error);
-      toast.error('网络错误，请检查连接');
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      
+      if (error.name === 'AbortError') {
+        toast.error('请求超时，请检查网络连接或稍后重试');
+      } else if (error.message.includes('Failed to fetch')) {
+        toast.error('网络连接失败，请检查后端服务是否正常运行');
+      } else {
+        toast.error(error.message || '分析失败，请重试');
+      }
+      
+      console.error('分析错误:', error);
     } finally {
       setIsAnalyzing(false);
     }
@@ -111,6 +136,14 @@ const Schedule: React.FC = () => {
     }
   };
 
+  const handleCancel = () => {
+    // 清空当前分析结果
+    setWorkInfo(null);
+    setRecommendations([]);
+    setSelectedSlot(null);
+    // 保留用户输入的描述，以便重新分析
+  };
+
   const formatDateTime = (dateTimeStr: string) => {
     const date = new Date(dateTimeStr);
     return date.toLocaleString('zh-CN', {
@@ -151,18 +184,30 @@ const Schedule: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-6">
       <div className="max-w-4xl mx-auto">
         {/* 页面标题 */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="p-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl">
-              <Brain className="w-8 h-8 text-white" />
+        <div className="relative mb-8">
+          {/* 返回主页按钮 */}
+          <button
+            onClick={() => navigate('/')}
+            className="absolute left-0 top-0 flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 group"
+          >
+            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform duration-200" />
+            <Home className="w-5 h-5" />
+            <span className="font-medium">返回主页</span>
+          </button>
+          
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <div className="p-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl">
+                <Brain className="w-8 h-8 text-white" />
+              </div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                智能日程安排
+              </h1>
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              智能日程安排
-            </h1>
+            <p className="text-gray-600 text-lg">
+              描述您的工作需求，AI 将为您推荐最佳的时间安排
+            </p>
           </div>
-          <p className="text-gray-600 text-lg">
-            描述您的工作需求，AI 将为您推荐最佳的时间安排
-          </p>
         </div>
 
         {/* 工作描述输入区 */}
@@ -188,11 +233,13 @@ const Schedule: React.FC = () => {
               {isAnalyzing ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  AI 正在分析中...
+                  <span className="animate-pulse">智能分析中，请稍候...</span>
                 </>
               ) : (
                 <>
-                  <Brain className="w-5 h-5" />
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
                   开始智能分析
                 </>
               )}
@@ -200,8 +247,21 @@ const Schedule: React.FC = () => {
           </div>
         </div>
 
+        {/* 分析状态提示 */}
+        {isAnalyzing && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+            <div className="flex items-center justify-center space-x-3">
+              <div className="w-6 h-6 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+              <div className="text-center">
+                <p className="text-blue-800 font-medium">正在智能分析您的工作安排...</p>
+                <p className="text-blue-600 text-sm mt-1">这可能需要几秒钟时间，请耐心等待</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 工作信息展示 */}
-        {workInfo && (
+        {workInfo && !isAnalyzing && (
           <div className="bg-white rounded-2xl shadow-xl p-8 mb-8">
             <div className="flex items-center gap-3 mb-6">
               <Clock className="w-6 h-6 text-green-600" />
@@ -289,23 +349,33 @@ const Schedule: React.FC = () => {
             
             {selectedSlot && (
               <div className="mt-8 pt-6 border-t border-gray-200">
-                <button
-                  onClick={handleConfirm}
-                  disabled={isConfirming}
-                  className="w-full bg-gradient-to-r from-green-500 to-blue-600 text-white py-4 px-6 rounded-xl font-semibold hover:from-green-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-3"
-                >
-                  {isConfirming ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      正在确认中...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-5 h-5" />
-                      确认日程安排
-                    </>
-                  )}
-                </button>
+                <div className="flex gap-4">
+                  <button
+                    onClick={handleCancel}
+                    disabled={isConfirming}
+                    className="flex-1 bg-gray-500 text-white py-4 px-6 rounded-xl font-semibold hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-3"
+                  >
+                    <X className="w-5 h-5" />
+                    取消
+                  </button>
+                  <button
+                    onClick={handleConfirm}
+                    disabled={isConfirming}
+                    className="flex-1 bg-gradient-to-r from-green-500 to-blue-600 text-white py-4 px-6 rounded-xl font-semibold hover:from-green-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-3"
+                  >
+                    {isConfirming ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        正在确认中...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-5 h-5" />
+                        确认日程安排
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             )}
           </div>
