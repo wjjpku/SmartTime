@@ -118,8 +118,14 @@ class TaskService:
                 print(f"跳过损坏的任务数据: {e}")
                 continue
         
-        # 按开始时间排序
-        tasks.sort(key=lambda x: x.start)
+        # 按开始时间排序，确保datetime对象是naive的
+        def get_sort_key(task):
+            start_time = task.start
+            if start_time.tzinfo is not None:
+                start_time = start_time.replace(tzinfo=None)
+            return start_time
+        
+        tasks.sort(key=get_sort_key)
         return tasks
     
     async def get_task_by_id(self, task_id: str) -> Optional[Task]:
@@ -181,12 +187,24 @@ class TaskService:
         """获取指定日期范围内的任务"""
         all_tasks = await self.get_all_tasks()
         
+        # 确保所有datetime对象都是naive的（没有时区信息）
+        if start_date.tzinfo is not None:
+            start_date = start_date.replace(tzinfo=None)
+        if end_date.tzinfo is not None:
+            end_date = end_date.replace(tzinfo=None)
+        
         filtered_tasks = []
         for task in all_tasks:
+            # 确保任务的datetime也是naive的
+            task_start = task.start.replace(tzinfo=None) if task.start.tzinfo is not None else task.start
+            task_end = None
+            if task.end:
+                task_end = task.end.replace(tzinfo=None) if task.end.tzinfo is not None else task.end
+            
             # 检查任务是否在指定日期范围内
-            if (task.start >= start_date and task.start <= end_date) or \
-               (task.end and task.end >= start_date and task.end <= end_date) or \
-               (task.start <= start_date and task.end and task.end >= end_date):
+            if (task_start >= start_date and task_start <= end_date) or \
+               (task_end and task_end >= start_date and task_end <= end_date) or \
+               (task_start <= start_date and task_end and task_end >= end_date):
                 filtered_tasks.append(task)
         
         return filtered_tasks

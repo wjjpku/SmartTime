@@ -6,14 +6,18 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { taskStore } from '../store/taskStore';
+import { taskStore, Task } from '../store/taskStore';
 import TaskModal from '../components/TaskModal';
+import TaskResultModal from '../components/TaskResultModal';
 
 export default function Home() {
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [createdTasks, setCreatedTasks] = useState<Task[]>([]);
+  const [originalInputText, setOriginalInputText] = useState('');
   
   const { tasks, fetchTasks, parseAndCreateTasks, deleteTask } = taskStore();
 
@@ -29,10 +33,17 @@ export default function Home() {
     }
 
     setIsLoading(true);
+    const currentInputText = inputText;
     try {
-      await parseAndCreateTasks(inputText);
+      const newTasks = await parseAndCreateTasks(inputText);
       setInputText('');
-      toast.success('任务创建成功！');
+      
+      // 显示任务创建结果
+      setCreatedTasks(newTasks);
+      setOriginalInputText(currentInputText);
+      setShowResultModal(true);
+      
+      toast.success(`成功创建了 ${newTasks.length} 个任务！`);
     } catch (error) {
       toast.error('创建任务失败，请重试');
     } finally {
@@ -170,6 +181,16 @@ export default function Home() {
             setSelectedTask(null);
             fetchTasks();
           }}
+        />
+      )}
+
+      {/* 任务创建结果模态框 */}
+      {showResultModal && (
+        <TaskResultModal
+          isOpen={showResultModal}
+          onClose={() => setShowResultModal(false)}
+          createdTasks={createdTasks}
+          originalText={originalInputText}
         />
       )}
 

@@ -22,14 +22,29 @@ class DeepSeekService:
         self.model = settings.deepseek_model
         self.timeout = 30.0
     
-    def _get_system_prompt(self) -> str:
-        """获取系统提示词"""
-        return """
-你是一个专业的任务解析助手。请将用户的自然语言描述解析为结构化的任务数据。
+    def _get_system_prompt(self, current_datetime: datetime) -> str:
+        """获取系统提示词，包含当前时间信息"""
+        current_date_str = current_datetime.strftime("%Y-%m-%d")
+        current_time_str = current_datetime.strftime("%H:%M:%S")
+        current_weekday_cn = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][current_datetime.weekday()]
+        
+        tomorrow_date = (current_datetime + timedelta(days=1)).strftime("%Y-%m-%d")
+        day_after_tomorrow_date = (current_datetime + timedelta(days=2)).strftime("%Y-%m-%d")
+        
+        return f"""你是一个智能任务解析助手，专门将自然语言描述转换为结构化的任务信息。
+
+当前时间信息：
+- 当前日期：{current_date_str} ({current_weekday_cn})
+- 当前时间：{current_time_str}
 
 解析规则：
 1. 识别任务标题（动作或事件名称）
-2. 解析时间信息（支持相对时间如"明天"、"下周一"等）
+2. 解析时间信息，基于当前时间准确理解相对时间：
+   - "今天" = {current_date_str}
+   - "明天" = {tomorrow_date}
+   - "后天" = {day_after_tomorrow_date}
+   - "下周一" = 下一个星期一的日期
+   - "下周" = 从下周一开始的一周
 3. 估算任务优先级（high/medium/low）
 4. 如果没有明确的结束时间，根据任务类型估算合理的持续时间
 
@@ -42,18 +57,18 @@ class DeepSeekService:
 示例输入："明天上午9点开会，下午写报告"
 示例输出：
 [
-  {
+  {{
     "title": "开会",
-    "start": "2024-01-15T09:00:00",
-    "end": "2024-01-15T10:00:00",
+    "start": "{tomorrow_date}T09:00:00",
+    "end": "{tomorrow_date}T10:00:00",
     "priority": "high"
-  },
-  {
+  }},
+  {{
     "title": "写报告",
-    "start": "2024-01-15T14:00:00",
-    "end": "2024-01-15T17:00:00",
+    "start": "{tomorrow_date}T14:00:00",
+    "end": "{tomorrow_date}T17:00:00",
     "priority": "medium"
-  }
+  }}
 ]
 
 请只返回 JSON 数组，不要包含其他文字说明。
@@ -79,6 +94,9 @@ class DeepSeekService:
     async def parse_tasks(self, text: str) -> List[TaskCreate]:
         """解析自然语言文本为任务列表"""
         try:
+            # 获取当前时间
+            current_datetime = datetime.now()
+            
             # 准备 API 请求
             api_key = self.settings.deepseek_api_key
             headers = {
@@ -91,11 +109,11 @@ class DeepSeekService:
                 "messages": [
                     {
                         "role": "system",
-                        "content": self._get_system_prompt()
+                        "content": self._get_system_prompt(current_datetime)
                     },
                     {
                         "role": "user",
-                        "content": f"请解析以下任务描述：{text}"
+                        "content": f"当前时间：{current_datetime.strftime('%Y-%m-%d %H:%M:%S')}\n\n请解析以下任务描述：{text}"
                     }
                 ],
                 "temperature": 0.1,
