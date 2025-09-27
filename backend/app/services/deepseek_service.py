@@ -103,7 +103,7 @@ class DeepSeekService:
 请只返回 JSON 数组，不要包含其他文字说明。
 """
     
-    def _parse_work_description(self, description: str) -> WorkInfo:
+    async def _parse_work_description(self, description: str) -> WorkInfo:
         """解析工作描述，提取工作信息"""
         import re
         from datetime import datetime, timedelta
@@ -151,8 +151,8 @@ class DeepSeekService:
         if '安静' in description:
             preferences.append('安静环境')
         
-        # 生成工作标题（取描述的前50个字符）
-        title = description[:50] if len(description) <= 50 else description[:47] + "..."
+        # 使用AI生成简洁的工作标题
+        title = await self._generate_task_title(description)
         
         return WorkInfo(
             title=title,
@@ -162,6 +162,60 @@ class DeepSeekService:
             priority=TaskPriority.MEDIUM,
             preferences=preferences
         )
+    
+    async def _generate_task_title(self, description: str) -> str:
+        """使用AI生成简洁的任务标题"""
+        try:
+            # 准备 API 请求
+            api_key = self.settings.deepseek_api_key
+            if not api_key:
+                # 如果没有API密钥，使用简单的截取方法
+                return description[:20] if len(description) <= 20 else description[:17] + "..."
+                
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}"
+            }
+            
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "你是一个专业的任务管理助手。请根据用户的工作描述，生成一个简洁、专业的任务标题。要求：\n1. 标题长度控制在10-20个字符\n2. 准确概括工作内容的核心\n3. 使用简洁的动词+名词结构\n4. 避免冗余词汇\n5. 只返回标题文本，不要其他内容"
+                    },
+                    {
+                        "role": "user",
+                        "content": f"请为以下工作描述生成简洁的任务标题：{description}"
+                    }
+                ],
+                "temperature": 0.1,
+                "max_tokens": 50
+            }
+            
+            # 发送 API 请求
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    self.api_url,
+                    headers=headers,
+                    json=payload
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    
+                    if "choices" in result and result["choices"]:
+                        title = result["choices"][0]["message"]["content"].strip()
+                        # 确保标题长度合理
+                        if len(title) > 30:
+                            title = title[:27] + "..."
+                        return title
+                        
+        except Exception as e:
+            print(f"AI生成任务标题失败: {e}")
+            
+        # 如果AI生成失败，使用备用方法
+        return description[:20] if len(description) <= 20 else description[:17] + "..."
     
     def _parse_relative_time(self, text: str) -> datetime:
         """解析相对时间表达式（简单实现）"""
@@ -413,6 +467,7 @@ class DeepSeekService:
 - 截止日期：{work_info.deadline.strftime('%Y-%m-%d %H:%M:%S') if work_info.deadline else '无明确截止日期'}
 - 优先级：{work_info.priority}
 - 偏好时间：{work_info.preferences or '无特殊偏好'}
+- 建议任务标题：{work_info.title}
 
 分析要求：
 1. 根据工作内容判断最适合的时间段（如：创意工作适合上午，会议适合工作时间，学习适合安静时段）
@@ -421,6 +476,7 @@ class DeepSeekService:
 4. 考虑截止日期的紧迫性
 5. 根据工作时长合理分配时间块
 6. 提供3-5个不同的时间选择
+7. 使用已生成的简洁任务标题，不要使用用户的原始描述作为任务名称
 
 返回格式要求：
 - 必须返回有效的 JSON 数组格式
@@ -451,7 +507,7 @@ class DeepSeekService:
         """分析工作描述并推荐时间段，返回解析的工作信息和推荐时间段"""
         try:
             # 首先解析工作描述，提取工作信息
-            work_info = self._parse_work_description(description)
+            work_info = await self._parse_work_description(description)
             
             # 首先尝试使用DeepSeek API
             try:

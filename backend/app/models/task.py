@@ -138,3 +138,15 @@ class TaskDeleteResponse(BaseModel):
     deleted_tasks: List[Task] = Field(default=[], description="被删除的任务列表")
     message: str = Field(..., description="操作结果消息")
     error: Optional[str] = Field(None, description="错误信息（删除失败时）")
+
+class BatchDeleteRequest(BaseModel):
+    """批量删除任务请求模型"""
+    date: datetime = Field(..., description="指定的日期（用于确定删除范围）")
+    
+class BatchDeleteResponse(BaseModel):
+    """批量删除任务响应模型"""
+    success: bool = Field(..., description="删除是否成功")
+    deleted_count: int = Field(..., description="删除的任务数量")
+    deleted_tasks: List[Task] = Field(default=[], description="被删除的任务列表")
+    message: str = Field(..., description="操作结果消息")
+    error: Optional[str] = Field(None, description="错误信息（删除失败时）")

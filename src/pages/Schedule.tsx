@@ -53,7 +53,7 @@ const Schedule: React.FC = () => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
-    }, 15000); // 15秒超时
+    }, 70000); // 70秒超时，确保与后端60秒超时匹配并留有余量
 
     try {
       const response = await fetch('/api/schedule/analyze', {
@@ -84,7 +84,7 @@ const Schedule: React.FC = () => {
       clearTimeout(timeoutId);
       
       if (error.name === 'AbortError') {
-        toast.error('请求超时，请检查网络连接或稍后重试');
+        toast.error('分析超时，AI处理可能需要更长时间，请稍后重试');
       } else if (error.message.includes('Failed to fetch')) {
         toast.error('网络连接失败，请检查后端服务是否正常运行');
       } else {
@@ -233,7 +233,7 @@ const Schedule: React.FC = () => {
               {isAnalyzing ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span className="animate-pulse">智能分析中，请稍候...</span>
+                  <span className="animate-pulse">AI深度分析中，请稍候...</span>
                 </>
               ) : (
                 <>
@@ -254,7 +254,7 @@ const Schedule: React.FC = () => {
               <div className="w-6 h-6 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
               <div className="text-center">
                 <p className="text-blue-800 font-medium">正在智能分析您的工作安排...</p>
-                <p className="text-blue-600 text-sm mt-1">这可能需要几秒钟时间，请耐心等待</p>
+                <p className="text-blue-600 text-sm mt-1">AI正在深度分析，这可能需要30-60秒，请耐心等待</p>
               </div>
             </div>
           </div>

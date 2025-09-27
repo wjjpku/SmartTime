@@ -385,3 +385,83 @@ class TaskService:
                 filtered_tasks.append(task)
         
         return filtered_tasks
+    
+    async def delete_tasks_by_day(self, target_date: datetime) -> List[Task]:
+        """删除指定日期的所有任务"""
+        print(f"[DEBUG] delete_tasks_by_day 接收到的日期: {target_date}")
+        print(f"[DEBUG] target_date.date(): {target_date.date()}")
+        
+        # 计算当天的开始和结束时间
+        start_of_day = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        print(f"[DEBUG] 删除日期范围: {start_of_day} 到 {end_of_day}")
+        
+        # 获取当天的任务
+        tasks_to_delete = await self.get_tasks_by_date_range(start_of_day, end_of_day)
+        
+        # 删除任务
+        deleted_tasks = []
+        for task in tasks_to_delete:
+            success = await self.delete_task(task.id)
+            if success:
+                deleted_tasks.append(task)
+        
+        return deleted_tasks
+    
+    async def delete_tasks_by_week(self, target_date: datetime) -> List[Task]:
+        """删除指定日期所在周的所有任务"""
+        print(f"[DEBUG] delete_tasks_by_week 接收到的日期: {target_date}")
+        print(f"[DEBUG] target_date.date(): {target_date.date()}")
+        print(f"[DEBUG] target_date.weekday(): {target_date.weekday()} (0=周一, 6=周日)")
+        
+        # 计算本周的开始（周一）和结束（周日）
+        days_since_monday = target_date.weekday()
+        start_of_week = target_date - timedelta(days=days_since_monday)
+        start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_week = start_of_week + timedelta(days=6, hours=23, minutes=59, seconds=59, microseconds=999999)
+        
+        print(f"[DEBUG] 删除周范围: {start_of_week.date()} 到 {end_of_week.date()}")
+        
+        # 获取本周的任务
+        tasks_to_delete = await self.get_tasks_by_date_range(start_of_week, end_of_week)
+        
+        # 删除任务
+        deleted_tasks = []
+        for task in tasks_to_delete:
+            success = await self.delete_task(task.id)
+            if success:
+                deleted_tasks.append(task)
+        
+        return deleted_tasks
+    
+    async def delete_tasks_by_month(self, target_date: datetime) -> List[Task]:
+        """删除指定日期所在月的所有任务"""
+        print(f"[DEBUG] delete_tasks_by_month 接收到的日期: {target_date}")
+        print(f"[DEBUG] target_date.date(): {target_date.date()}")
+        print(f"[DEBUG] target_date年月: {target_date.year}-{target_date.month}")
+        
+        # 计算本月的开始和结束
+        start_of_month = target_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        # 计算下个月的第一天，然后减去一天得到本月最后一天
+        if target_date.month == 12:
+            next_month = target_date.replace(year=target_date.year + 1, month=1, day=1)
+        else:
+            next_month = target_date.replace(month=target_date.month + 1, day=1)
+        
+        end_of_month = next_month - timedelta(microseconds=1)
+        
+        print(f"[DEBUG] 删除月份范围: {start_of_month.date()} 到 {end_of_month.date()}")
+        
+        # 获取本月的任务
+        tasks_to_delete = await self.get_tasks_by_date_range(start_of_month, end_of_month)
+        
+        # 删除任务
+        deleted_tasks = []
+        for task in tasks_to_delete:
+            success = await self.delete_task(task.id)
+            if success:
+                deleted_tasks.append(task)
+        
+        return deleted_tasks

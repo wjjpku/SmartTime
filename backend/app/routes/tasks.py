@@ -11,23 +11,20 @@
 - DELETE /tasks/{task_id} - 删除任务
 """
 
+from datetime import datetime, timedelta
 from typing import List
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Depends, status
 from app.models import (
-    Task,
-    TaskCreate,
-    TaskUpdate,
-    TaskParseRequest,
-    TaskParseResponse,
-    TaskListResponse,
-    TaskResponse,
-    DeleteResponse,
-    TaskDeleteRequest,
-    TaskDeleteResponse
+    Task, TaskCreate, TaskUpdate, TaskParseRequest, TaskParseResponse,
+    TaskListResponse, TaskResponse, DeleteResponse, TaskDeleteRequest, TaskDeleteResponse,
+    BatchDeleteRequest, BatchDeleteResponse
 )
 from app.services.task_service import TaskService
 from app.services.deepseek_service import DeepSeekService
 from app.utils.config import get_settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 # 创建路由器
 router = APIRouter()
@@ -181,72 +178,99 @@ async def create_task_direct(task: TaskCreate):
             detail=f"创建任务失败: {str(e)}"
         )
 
-@router.post("/tasks/delete", response_model=TaskDeleteResponse)
+@router.delete("/by-description", response_model=TaskDeleteResponse)
 async def delete_tasks_by_description(request: TaskDeleteRequest):
-    """
-    自然语言删除任务接口
-    
-    根据用户的自然语言描述智能匹配并删除相关任务
-    """
+    """通过自然语言描述删除任务"""
     try:
-        # 获取所有现有任务
-        existing_tasks = await task_service.get_all_tasks()
+        # 使用 DeepSeek 服务匹配并删除任务
+        deleted_tasks = await deepseek_service.delete_tasks_by_description(request.description)
         
-        if not existing_tasks:
-            return TaskDeleteResponse(
-                success=False,
-                deleted_tasks=[],
-                message="没有找到任何任务",
-                error="任务列表为空"
-            )
-        
-        # 调用 DeepSeek 服务进行智能匹配
-        from app.services.deepseek_service import DeepSeekService
-        from app.utils.config import get_settings
-        
-        deepseek_service = DeepSeekService(get_settings())
-        matched_task_ids = await deepseek_service.match_tasks_for_deletion(request.description, existing_tasks)
-        
-        if not matched_task_ids:
-            return TaskDeleteResponse(
-                success=False,
-                deleted_tasks=[],
-                message="没有找到匹配的任务",
-                error="根据描述未能匹配到任何任务"
-            )
-        
-        # 删除匹配的任务
-        deleted_tasks = []
-        for task_id in matched_task_ids:
-            try:
-                # 获取任务详情
-                task = await task_service.get_task_by_id(task_id)
-                if task:
-                    deleted_tasks.append(task)
-                    # 删除任务
-                    await task_service.delete_task(task_id)
-            except Exception as e:
-                print(f"删除任务 {task_id} 时出错: {str(e)}")
-                continue
-        
-        if deleted_tasks:
-            return TaskDeleteResponse(
-                success=True,
-                deleted_tasks=deleted_tasks,
-                message=f"成功删除 {len(deleted_tasks)} 个任务"
-            )
-        else:
-            return TaskDeleteResponse(
-                success=False,
-                deleted_tasks=[],
-                message="删除操作失败",
-                error="无法删除匹配的任务"
-            )
-    
+        return TaskDeleteResponse(
+            success=True,
+            deleted_count=len(deleted_tasks),
+            deleted_tasks=deleted_tasks,
+            message=f"成功删除 {len(deleted_tasks)} 个任务"
+        )
     except Exception as e:
+        logger.error(f"删除任务失败: {str(e)}")
         return TaskDeleteResponse(
             success=False,
+            deleted_count=0,
             deleted_tasks=[],
-            message="删除任务时发生错误",
+            message="删除任务失败",
+            error=str(e)
+        )
+
+
+@router.post("/tasks/delete/day", response_model=BatchDeleteResponse)
+async def delete_tasks_by_day(request: BatchDeleteRequest):
+    """删除指定日期的所有任务"""
+    try:
+        deleted_tasks = await task_service.delete_tasks_by_day(request.date)
+        
+        return BatchDeleteResponse(
+            success=True,
+            deleted_count=len(deleted_tasks),
+            deleted_tasks=deleted_tasks,
+            message=f"成功删除 {request.date.strftime('%Y年%m月%d日')} 的 {len(deleted_tasks)} 个任务"
+        )
+    except Exception as e:
+        logger.error(f"删除当日任务失败: {str(e)}")
+        return BatchDeleteResponse(
+            success=False,
+            deleted_count=0,
+            deleted_tasks=[],
+            message="删除当日任务失败",
+            error=str(e)
+        )
+
+
+@router.post("/tasks/delete/week", response_model=BatchDeleteResponse)
+async def delete_tasks_by_week(request: BatchDeleteRequest):
+    """删除指定日期所在周的所有任务"""
+    try:
+        deleted_tasks = await task_service.delete_tasks_by_week(request.date)
+        
+        # 计算周的范围用于显示
+        days_since_monday = request.date.weekday()
+        start_of_week = request.date - timedelta(days=days_since_monday)
+        end_of_week = start_of_week + timedelta(days=6)
+        
+        return BatchDeleteResponse(
+            success=True,
+            deleted_count=len(deleted_tasks),
+            deleted_tasks=deleted_tasks,
+            message=f"成功删除 {start_of_week.strftime('%m月%d日')} 至 {end_of_week.strftime('%m月%d日')} 本周的 {len(deleted_tasks)} 个任务"
+        )
+    except Exception as e:
+        logger.error(f"删除本周任务失败: {str(e)}")
+        return BatchDeleteResponse(
+            success=False,
+            deleted_count=0,
+            deleted_tasks=[],
+            message="删除本周任务失败",
+            error=str(e)
+        )
+
+
+@router.post("/tasks/delete/month", response_model=BatchDeleteResponse)
+async def delete_tasks_by_month(request: BatchDeleteRequest):
+    """删除指定日期所在月的所有任务"""
+    try:
+        deleted_tasks = await task_service.delete_tasks_by_month(request.date)
+        
+        return BatchDeleteResponse(
+            success=True,
+            deleted_count=len(deleted_tasks),
+            deleted_tasks=deleted_tasks,
+            message=f"成功删除 {request.date.strftime('%Y年%m月')} 的 {len(deleted_tasks)} 个任务"
+        )
+    except Exception as e:
+        logger.error(f"删除本月任务失败: {str(e)}")
+        return BatchDeleteResponse(
+            success=False,
+            deleted_count=0,
+            deleted_tasks=[],
+            message="删除本月任务失败",
             error=str(e)
         )

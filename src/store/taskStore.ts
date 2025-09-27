@@ -62,7 +62,7 @@ export interface TaskUpdate {
 }
 
 // API 基础配置
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = '/api';
 
 // 创建 axios 实例
 const api = axios.create({
@@ -83,6 +83,7 @@ interface TaskStore {
   createTask: (task: TaskCreate) => Promise<Task>;
   updateTask: (id: string, task: TaskUpdate) => Promise<Task>;
   deleteTask: (id: string) => Promise<void>;
+  batchDeleteTasks: (type: 'day' | 'week' | 'month', date: Date) => Promise<{ success: boolean; deleted_count: number; message: string }>;
   parseAndCreateTasks: (text: string) => Promise<Task[]>;
   analyzeSchedule: (description: string) => Promise<{ work_info: WorkInfo; recommendations: TimeSlot[] }>;
   confirmSchedule: (work_info: WorkInfo, selected_slot: TimeSlot) => Promise<Task>;
@@ -169,6 +170,38 @@ export const taskStore = create<TaskStore>((set, get) => ({
     } catch (error: any) {
       set({ 
         error: error.response?.data?.detail || '删除任务失败', 
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+
+  // 批量删除任务
+  batchDeleteTasks: async (type: 'day' | 'week' | 'month', date: Date) => {
+    set({ isLoading: true, error: null });
+    try {
+      // 使用本地日期时间，避免时区转换问题
+      const localDateTime = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0);
+      const response = await api.post(`/tasks/delete/${type}`, {
+        date: localDateTime.toISOString()
+      });
+      
+      if (response.data.success) {
+        // 重新获取任务列表以确保数据同步
+        await get().fetchTasks();
+        
+        set({ isLoading: false });
+        return {
+          success: true,
+          deleted_count: response.data.deleted_count,
+          message: response.data.message
+        };
+      } else {
+        throw new Error(response.data.error || '批量删除失败');
+      }
+    } catch (error: any) {
+      set({ 
+        error: error.response?.data?.detail || error.message || '批量删除失败', 
         isLoading: false 
       });
       throw error;
