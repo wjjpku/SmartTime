@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+配置管理
+
+负责应用配置的加载和管理
+"""
+
+import os
+from functools import lru_cache
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    """应用配置类"""
+    
+    # 应用基本配置
+    app_name: str = "智能任务管理系统"
+    app_version: str = "1.0.0"
+    debug: bool = False
+    
+    # API 配置
+    api_host: str = "0.0.0.0"
+    api_port: int = 8000
+    api_prefix: str = "/api"
+    
+    # CORS 配置
+    cors_origins: list = ["http://localhost:3000", "http://localhost:5173"]
+    cors_methods: list = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    cors_headers: list = ["*"]
+    
+    # DeepSeek API 配置
+    deepseek_api_key: str = ""
+    deepseek_api_url: str = "https://api.deepseek.com/v1/chat/completions"
+    deepseek_model: str = "deepseek-chat"
+    
+    # 数据存储配置
+    data_dir: str = "data"
+    tasks_file: str = "tasks.json"
+    
+    # 日志配置
+    log_level: str = "INFO"
+    log_format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    
+    class Config:
+        """Pydantic 配置"""
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+
+@lru_cache()
+def get_settings() -> Settings:
+    """获取应用配置（单例模式）"""
+    return Settings()
+
+def get_data_file_path(filename: str) -> str:
+    """获取数据文件的完整路径"""
+    settings = get_settings()
+    data_dir = settings.data_dir
+    
+    # 确保数据目录存在
+    os.makedirs(data_dir, exist_ok=True)
+    
+    return os.path.join(data_dir, filename)
