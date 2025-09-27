@@ -11,6 +11,22 @@ export interface RecurrenceRule {
   count?: number;
 }
 
+// 工作信息接口定义
+export interface WorkInfo {
+  title: string;
+  duration_hours: number;
+  deadline?: string;
+  preferences?: string[];
+}
+
+// 时间段接口定义
+export interface TimeSlot {
+  start: string;
+  end: string;
+  score: number;
+  reason: string;
+}
+
 // 任务接口定义
 export interface Task {
   id: string;
@@ -68,6 +84,8 @@ interface TaskStore {
   updateTask: (id: string, task: TaskUpdate) => Promise<Task>;
   deleteTask: (id: string) => Promise<void>;
   parseAndCreateTasks: (text: string) => Promise<Task[]>;
+  analyzeSchedule: (description: string) => Promise<{ work_info: WorkInfo; recommendations: TimeSlot[] }>;
+  confirmSchedule: (work_info: WorkInfo, selected_slot: TimeSlot) => Promise<Task>;
   clearError: () => void;
 }
 
@@ -178,6 +196,60 @@ export const taskStore = create<TaskStore>((set, get) => ({
     } catch (error: any) {
       set({ 
         error: error.response?.data?.detail || error.message || '解析任务失败', 
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+
+  // 分析智能日程安排
+  analyzeSchedule: async (description: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await api.post('/schedule/analyze', { description });
+      
+      if (response.data.success) {
+        set({ isLoading: false });
+        return {
+          work_info: response.data.work_info,
+          recommendations: response.data.recommendations
+        };
+      } else {
+        throw new Error(response.data.error || '分析日程失败');
+      }
+    } catch (error: any) {
+      set({ 
+        error: error.response?.data?.detail || error.message || '分析日程失败', 
+        isLoading: false 
+      });
+      throw error;
+    }
+  },
+
+  // 确认日程安排
+  confirmSchedule: async (work_info: WorkInfo, selected_slot: TimeSlot) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await api.post('/schedule/confirm', { 
+        work_info, 
+        selected_slot 
+      });
+      
+      if (response.data.success) {
+        const newTask = response.data.task;
+        
+        set(state => ({
+          tasks: [...state.tasks, newTask],
+          isLoading: false
+        }));
+        
+        return newTask;
+      } else {
+        throw new Error(response.data.error || '确认日程失败');
+      }
+    } catch (error: any) {
+      set({ 
+        error: error.response?.data?.detail || error.message || '确认日程失败', 
         isLoading: false 
       });
       throw error;

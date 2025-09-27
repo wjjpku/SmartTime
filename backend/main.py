@@ -11,7 +11,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import tasks
+from app.routes import tasks, schedule
 
 # 创建 FastAPI 应用实例
 app = FastAPI(
@@ -33,6 +33,7 @@ app.add_middleware(
 
 # 注册路由
 app.include_router(tasks.router, prefix="/api", tags=["tasks"])
+app.include_router(schedule.router, prefix="/api", tags=["schedule"])
 
 # 根路径健康检查
 @app.get("/")

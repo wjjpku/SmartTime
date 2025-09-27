@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Plus, Send, Loader2 } from 'lucide-react';
+import { Calendar, Plus, Send, Loader2, Zap } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
@@ -11,6 +12,7 @@ import TaskModal from '../components/TaskModal';
 import TaskResultModal from '../components/TaskResultModal';
 
 export default function Home() {
+  const navigate = useNavigate();
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -131,27 +133,37 @@ export default function Home() {
                 disabled={isLoading}
               />
             </div>
-            <div className="flex justify-end space-x-3">
+            <div className="flex justify-between items-center">
               <button
                 type="button"
-                onClick={() => setShowModal(true)}
-                className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center gap-2"
+                onClick={() => navigate('/schedule')}
+                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
               >
-                <Plus size={20} />
-                手动添加
+                <Zap size={20} />
+                智能日程安排
               </button>
-              <button
-                type="submit"
-                disabled={isLoading || !inputText.trim()}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-              >
-                {isLoading ? (
-                  <Loader2 className="animate-spin" size={20} />
-                ) : (
-                  <Send size={20} />
-                )}
-                {isLoading ? '解析中...' : 'AI 解析任务'}
-              </button>
+              <div className="flex space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(true)}
+                  className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center gap-2"
+                >
+                  <Plus size={20} />
+                  手动添加
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading || !inputText.trim()}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                >
+                  {isLoading ? (
+                    <Loader2 className="animate-spin" size={20} />
+                  ) : (
+                    <Send size={20} />
+                  )}
+                  {isLoading ? '解析中...' : 'AI 解析任务'}
+                </button>
+              </div>
             </div>
           </form>
         </div>

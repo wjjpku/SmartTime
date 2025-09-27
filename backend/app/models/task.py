@@ -89,3 +89,41 @@ class DeleteResponse(BaseModel):
     """删除操作响应模型"""
     success: bool = Field(..., description="删除是否成功")
     message: str = Field(..., description="操作结果消息")
+
+class WorkInfo(BaseModel):
+    """工作信息模型"""
+    title: str = Field(..., min_length=1, max_length=200, description="工作标题")
+    description: str = Field(..., min_length=1, max_length=1000, description="工作描述")
+    duration_hours: float = Field(..., gt=0, le=24, description="预估工作时长（小时）")
+    deadline: Optional[datetime] = Field(None, description="截止日期（ISO 8601格式）")
+    priority: Optional[TaskPriority] = Field(TaskPriority.MEDIUM, description="任务优先级")
+    preferences: Optional[List[str]] = Field(default=[], description="工作偏好（如：上午、下午、安静环境等）")
+
+class TimeSlot(BaseModel):
+    """时间段模型"""
+    start: datetime = Field(..., description="开始时间（ISO 8601格式）")
+    end: datetime = Field(..., description="结束时间（ISO 8601格式）")
+    score: int = Field(..., ge=0, le=100, description="推荐分数（0-100）")
+    reason: str = Field(..., min_length=1, max_length=500, description="推荐理由")
+
+class ScheduleAnalyzeRequest(BaseModel):
+    """智能日程分析请求模型"""
+    description: str = Field(..., min_length=1, max_length=1000, description="工作描述，包含截止日期、时长、偏好等")
+
+class ScheduleAnalyzeResponse(BaseModel):
+    """智能日程分析响应模型"""
+    success: bool = Field(..., description="分析是否成功")
+    work_info: Optional[WorkInfo] = Field(None, description="解析出的工作信息")
+    recommendations: List[TimeSlot] = Field(default=[], description="推荐的时间段列表")
+    error: Optional[str] = Field(None, description="错误信息（分析失败时）")
+
+class ScheduleConfirmRequest(BaseModel):
+    """确认日程安排请求模型"""
+    work_info: WorkInfo = Field(..., description="工作信息")
+    selected_slot: TimeSlot = Field(..., description="选择的时间段")
+
+class ScheduleConfirmResponse(BaseModel):
+    """确认日程安排响应模型"""
+    success: bool = Field(..., description="创建是否成功")
+    task: Optional[Task] = Field(None, description="创建的任务对象")
+    error: Optional[str] = Field(None, description="错误信息（创建失败时）")
