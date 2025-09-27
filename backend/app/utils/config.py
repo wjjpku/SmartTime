@@ -7,6 +7,7 @@
 """
 
 import os
+from pathlib import Path
 from functools import lru_cache
 from pydantic_settings import BaseSettings
 
@@ -43,7 +44,8 @@ class Settings(BaseSettings):
     
     class Config:
         """Pydantic 配置"""
-        env_file = ".env"
+        # 使用绝对路径确保能找到.env文件
+        env_file = Path(__file__).parent.parent.parent / ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
 

@@ -25,13 +25,14 @@ from app.models import (
 )
 from app.services.task_service import TaskService
 from app.services.deepseek_service import DeepSeekService
+from app.utils.config import get_settings
 
 # 创建路由器
 router = APIRouter()
 
 # 初始化服务
 task_service = TaskService()
-deepseek_service = DeepSeekService()
+deepseek_service = DeepSeekService(get_settings())
 
 @router.post("/tasks/parse", response_model=TaskParseResponse)
 async def parse_tasks(request: TaskParseRequest):

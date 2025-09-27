@@ -11,16 +11,15 @@ import httpx
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 from app.models import TaskCreate, TaskPriority
-from app.utils.config import get_settings
+from app.utils.config import get_settings, Settings
 
 class DeepSeekService:
     """DeepSeek API 服务类"""
     
-    def __init__(self):
-        """初始化 DeepSeek 服务"""
-        self.settings = get_settings()
-        self.api_url = "https://api.deepseek.com/v1/chat/completions"
-        self.model = "deepseek-chat"
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self.api_url = settings.deepseek_api_url
+        self.model = settings.deepseek_model
         self.timeout = 30.0
     
     def _get_system_prompt(self) -> str:
@@ -81,9 +80,10 @@ class DeepSeekService:
         """解析自然语言文本为任务列表"""
         try:
             # 准备 API 请求
+            api_key = self.settings.deepseek_api_key
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.settings.deepseek_api_key}"
+                "Authorization": f"Bearer {api_key}"
             }
             
             payload = {
