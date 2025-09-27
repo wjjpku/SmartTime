@@ -7,6 +7,7 @@ import { NotificationProvider } from "@/components/NotificationManager";
 import Landing from "@/pages/Landing";
 import Home from "@/pages/Home";
 import Schedule from "@/pages/Schedule";
+import Profile from "@/pages/Profile";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -28,6 +29,11 @@ export default function App() {
           <Route path="/schedule" element={
             <ProtectedRoute>
               <Schedule />
+            </ProtectedRoute>
+          } />
+          <Route path="/profile" element={
+            <ProtectedRoute>
+              <Profile />
             </ProtectedRoute>
           } />
           <Route path="/login" element={<Login />} />

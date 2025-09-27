@@ -14,6 +14,7 @@ import { useNotification } from '../components/NotificationManager';
 import TaskFilter from '../components/TaskFilter';
 import DataExport from '../components/DataExport';
 import UserGuide from '../components/UserGuide';
+import RealtimeClock, { getRelativeTimeLabel, isToday, isThisWeek } from '../components/RealtimeClock';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -65,6 +66,55 @@ export default function Home() {
         setShowUserGuide(true);
       }, 1000); // 延迟1秒显示，让用户先看到界面
     }
+  }, [fetchTasks]);
+
+  // 监听日期变化，在跨天时自动刷新数据
+  useEffect(() => {
+    const checkDateChange = () => {
+      const now = new Date();
+      const currentDateString = now.toDateString();
+      const storedDate = localStorage.getItem('lastActiveDate');
+      
+      if (storedDate && storedDate !== currentDateString) {
+        // 日期发生变化，刷新任务数据
+        console.log('检测到日期变化，刷新任务数据');
+        fetchTasks();
+      }
+      
+      // 更新存储的日期
+      localStorage.setItem('lastActiveDate', currentDateString);
+    };
+
+    // 立即检查一次
+    checkDateChange();
+
+    // 每分钟检查一次日期变化
+    const interval = setInterval(checkDateChange, 60000);
+
+    // 在午夜时刻（00:00）设置特殊检查
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const timeUntilMidnight = tomorrow.getTime() - now.getTime();
+
+    const midnightTimeout = setTimeout(() => {
+      console.log('午夜时刻，刷新任务数据');
+      fetchTasks();
+      
+      // 设置每天午夜的定时刷新
+      const dailyInterval = setInterval(() => {
+        console.log('每日午夜刷新任务数据');
+        fetchTasks();
+      }, 24 * 60 * 60 * 1000); // 24小时
+      
+      return () => clearInterval(dailyInterval);
+    }, timeUntilMidnight);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(midnightTimeout);
+    };
   }, [fetchTasks]);
 
   // 添加快捷键支持
@@ -447,9 +497,24 @@ export default function Home() {
       borderColor = '#6366f1'; // 紫色边框表示重复任务
     }
     
+    // 生成带有相对时间标识的标题
+    const taskDate = new Date(task.start);
+    const relativeTimeLabel = getRelativeTimeLabel(taskDate);
+    let displayTitle = task.title;
+    
+    // 为任务添加相对时间标识
+    if (relativeTimeLabel && relativeTimeLabel !== '其他') {
+      displayTitle = `${relativeTimeLabel} ${task.title}`;
+    }
+    
+    // 添加重复任务标识
+    if (task.is_recurring) {
+      displayTitle = `🔄 ${displayTitle}`;
+    }
+    
     return {
       id: task.id,
-      title: task.is_recurring ? `🔄 ${task.title}` : task.title,
+      title: displayTitle,
       start: task.start,
       end: task.end,
       backgroundColor,
@@ -458,7 +523,8 @@ export default function Home() {
       extendedProps: {
         isRecurring: task.is_recurring,
         recurrenceRule: task.recurrence_rule,
-        parentTaskId: task.parent_task_id
+        parentTaskId: task.parent_task_id,
+        relativeTime: relativeTimeLabel
       }
     };
   });
@@ -474,7 +540,10 @@ export default function Home() {
               <Calendar className="text-blue-600" size={32} />
               SmartTime
             </h1>
-            <p className="text-gray-600 text-sm sm:text-base lg:text-lg">用自然语言描述您的任务，AI 将自动为您安排日程</p>
+            <div className="flex flex-col gap-1">
+              <p className="text-gray-600 text-sm sm:text-base lg:text-lg">用自然语言描述您的任务，AI 将自动为您安排日程</p>
+              <RealtimeClock className="text-sm text-gray-500" />
+            </div>
           </div>
           
           {/* 右侧用户信息 */}
@@ -490,6 +559,14 @@ export default function Home() {
                 <p className="text-gray-500 text-xs">{user?.email}</p>
               </div>
             </div>
+            <button
+              onClick={() => navigate('/profile')}
+              className="flex items-center gap-1 px-3 py-1.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+              title="个人主页"
+            >
+              <User size={16} />
+              <span className="text-sm">主页</span>
+            </button>
             <button
               onClick={() => setShowUserGuide(true)}
               className="flex items-center gap-1 px-3 py-1.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
@@ -607,7 +684,56 @@ export default function Home() {
           </form>
         </div>
 
-
+        {/* 时间统计信息 */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+          {(() => {
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+            const startOfWeek = new Date(today);
+            startOfWeek.setDate(today.getDate() - today.getDay());
+            const endOfWeek = new Date(startOfWeek.getTime() + 6 * 24 * 60 * 60 * 1000);
+            
+            const todayTasks = getDisplayTasks().filter(task => {
+              const taskDate = new Date(task.start);
+              return taskDate >= today && taskDate < tomorrow;
+            });
+            
+            const tomorrowTasks = getDisplayTasks().filter(task => {
+              const taskDate = new Date(task.start);
+              const dayAfterTomorrow = new Date(tomorrow.getTime() + 24 * 60 * 60 * 1000);
+              return taskDate >= tomorrow && taskDate < dayAfterTomorrow;
+            });
+            
+            const thisWeekTasks = getDisplayTasks().filter(task => {
+              const taskDate = new Date(task.start);
+              return taskDate >= startOfWeek && taskDate <= endOfWeek;
+            });
+            
+            const completedTasks = getDisplayTasks().filter(task => task.completed);
+            
+            return (
+              <>
+                <div className="bg-white rounded-lg shadow-md p-4 text-center">
+                  <div className="text-2xl font-bold text-blue-600">{todayTasks.length}</div>
+                  <div className="text-sm text-gray-600">今日任务</div>
+                </div>
+                <div className="bg-white rounded-lg shadow-md p-4 text-center">
+                  <div className="text-2xl font-bold text-green-600">{tomorrowTasks.length}</div>
+                  <div className="text-sm text-gray-600">明日任务</div>
+                </div>
+                <div className="bg-white rounded-lg shadow-md p-4 text-center">
+                  <div className="text-2xl font-bold text-purple-600">{thisWeekTasks.length}</div>
+                  <div className="text-sm text-gray-600">本周任务</div>
+                </div>
+                <div className="bg-white rounded-lg shadow-md p-4 text-center">
+                  <div className="text-2xl font-bold text-orange-600">{completedTasks.length}</div>
+                  <div className="text-sm text-gray-600">已完成</div>
+                </div>
+              </>
+            );
+          })()}
+        </div>
 
         {/* 日历展示区域 */}
           <div className="bg-white rounded-xl shadow-lg p-3 sm:p-6">
