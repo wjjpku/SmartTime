@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Trash2, Calendar, Clock, Flag } from 'lucide-react';
+import { X, Save, Trash2, Calendar, Clock, Flag, Repeat } from 'lucide-react';
 import { format } from 'date-fns';
-import { taskStore, Task, TaskCreate, TaskUpdate } from '../store/taskStore';
+import { taskStore, Task, TaskCreate, TaskUpdate, RecurrenceRule } from '../store/taskStore';
 import { toast } from 'react-toastify';
 
 interface TaskModalProps {
@@ -15,7 +15,15 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
     title: '',
     start: '',
     end: '',
-    priority: 'medium' as 'low' | 'medium' | 'high'
+    priority: 'medium' as 'low' | 'medium' | 'high',
+    is_recurring: false,
+    recurrence_rule: {
+      frequency: 'weekly' as 'daily' | 'weekly' | 'monthly' | 'yearly',
+      interval: 1,
+      days_of_week: [] as number[],
+      end_date: null as string | null,
+      count: null as number | null
+    }
   });
   
   const [isLoading, setIsLoading] = useState(false);
@@ -29,7 +37,21 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
         title: task.title || '',
         start: task.start ? formatDateTimeLocal(new Date(task.start)) : '',
         end: task.end ? formatDateTimeLocal(new Date(task.end)) : '',
-        priority: task.priority || 'medium'
+        priority: task.priority || 'medium',
+        is_recurring: task.is_recurring || false,
+        recurrence_rule: task.recurrence_rule ? {
+          frequency: task.recurrence_rule.frequency || 'weekly',
+          interval: task.recurrence_rule.interval || 1,
+          days_of_week: task.recurrence_rule.days_of_week || [],
+          end_date: task.recurrence_rule.end_date || null,
+          count: task.recurrence_rule.count || null
+        } : {
+          frequency: 'weekly' as 'daily' | 'weekly' | 'monthly' | 'yearly',
+          interval: 1,
+          days_of_week: [] as number[],
+          end_date: null as string | null,
+          count: null as number | null
+        }
       });
     }
   }, [task]);
@@ -60,12 +82,24 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
     setIsLoading(true);
     
     try {
-      const taskData = {
+      const taskData: any = {
         title: formData.title.trim(),
         start: new Date(formData.start).toISOString(),
         end: formData.end ? new Date(formData.end).toISOString() : undefined,
-        priority: formData.priority
+        priority: formData.priority,
+        is_recurring: formData.is_recurring
       };
+      
+      // 如果是重复任务，添加重复规则
+      if (formData.is_recurring) {
+        taskData.recurrence_rule = {
+          frequency: formData.recurrence_rule.frequency,
+          interval: formData.recurrence_rule.interval,
+          days_of_week: formData.recurrence_rule.days_of_week,
+          end_date: formData.recurrence_rule.end_date,
+          count: formData.recurrence_rule.count
+        };
+      }
 
       if (isEditing) {
         await updateTask(task.id!, taskData as TaskUpdate);
@@ -201,6 +235,168 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
               ))}
             </div>
           </div>
+
+          {/* 重复任务设置 */}
+          {!isEditing && (
+            <div className="space-y-4">
+              {/* 重复任务开关 */}
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <Repeat size={16} />
+                  重复任务
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, is_recurring: !formData.is_recurring })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    formData.is_recurring ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                  disabled={isLoading}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      formData.is_recurring ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* 重复规则设置 */}
+              {formData.is_recurring && (
+                <div className="space-y-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  {/* 重复频率 */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      重复频率
+                    </label>
+                    <select
+                      value={formData.recurrence_rule.frequency}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        recurrence_rule: {
+                          ...formData.recurrence_rule,
+                          frequency: e.target.value as 'daily' | 'weekly' | 'monthly' | 'yearly'
+                        }
+                      })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={isLoading}
+                    >
+                      <option value="daily">每日</option>
+                      <option value="weekly">每周</option>
+                      <option value="monthly">每月</option>
+                      <option value="yearly">每年</option>
+                    </select>
+                  </div>
+
+                  {/* 重复间隔 */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      重复间隔
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">每</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="99"
+                        value={formData.recurrence_rule.interval}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          recurrence_rule: {
+                            ...formData.recurrence_rule,
+                            interval: parseInt(e.target.value) || 1
+                          }
+                        })}
+                        className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        disabled={isLoading}
+                      />
+                      <span className="text-sm text-gray-600">
+                        {formData.recurrence_rule.frequency === 'daily' ? '天' :
+                         formData.recurrence_rule.frequency === 'weekly' ? '周' :
+                         formData.recurrence_rule.frequency === 'monthly' ? '月' : '年'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 星期几选择（仅周重复时显示） */}
+                  {formData.recurrence_rule.frequency === 'weekly' && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        重复日期
+                      </label>
+                      <div className="grid grid-cols-7 gap-1">
+                        {['日', '一', '二', '三', '四', '五', '六'].map((day, index) => (
+                          <button
+                            key={index}
+                            type="button"
+                            onClick={() => {
+                              const days = [...formData.recurrence_rule.days_of_week];
+                              const dayIndex = days.indexOf(index);
+                              if (dayIndex > -1) {
+                                days.splice(dayIndex, 1);
+                              } else {
+                                days.push(index);
+                              }
+                              setFormData({
+                                ...formData,
+                                recurrence_rule: {
+                                  ...formData.recurrence_rule,
+                                  days_of_week: days.sort()
+                                }
+                              });
+                            }}
+                            className={`p-2 text-xs rounded-lg border-2 transition-all ${
+                              formData.recurrence_rule.days_of_week.includes(index)
+                                ? 'border-blue-500 bg-blue-100 text-blue-700'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                            disabled={isLoading}
+                          >
+                            {day}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 重复任务信息显示（编辑模式） */}
+          {isEditing && task && task.is_recurring && (
+            <div className="space-y-2 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+              <div className="flex items-center gap-2 text-purple-700 font-medium">
+                🔄 重复任务
+              </div>
+              {task.recurrence_rule && (
+                <div className="text-sm text-purple-600">
+                  <div>频率: {task.recurrence_rule.frequency === 'daily' ? '每日' : 
+                                task.recurrence_rule.frequency === 'weekly' ? '每周' :
+                                task.recurrence_rule.frequency === 'monthly' ? '每月' : '每年'}</div>
+                  {task.recurrence_rule.interval > 1 && (
+                    <div>间隔: 每 {task.recurrence_rule.interval} 次</div>
+                  )}
+                  {task.recurrence_rule.days_of_week && task.recurrence_rule.days_of_week.length > 0 && (
+                    <div>星期: {task.recurrence_rule.days_of_week.map(day => 
+                      ['日', '一', '二', '三', '四', '五', '六'][day]
+                    ).join(', ')}</div>
+                  )}
+                  {task.recurrence_rule.end_date && (
+                    <div>结束日期: {new Date(task.recurrence_rule.end_date).toLocaleDateString()}</div>
+                  )}
+                  {task.recurrence_rule.count && (
+                    <div>重复次数: {task.recurrence_rule.count} 次</div>
+                  )}
+                </div>
+              )}
+              {task.parent_task_id && (
+                <div className="text-xs text-purple-500">
+                  这是重复任务的一个实例
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 按钮组 */}
           <div className="flex justify-between pt-4">

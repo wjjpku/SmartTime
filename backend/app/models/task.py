@@ -17,12 +17,31 @@ class TaskPriority(str, Enum):
     MEDIUM = "medium"
     HIGH = "high"
 
+class RecurrenceFrequency(str, Enum):
+    """重复频率枚举"""
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    YEARLY = "yearly"
+
+class RecurrenceRule(BaseModel):
+    """重复规则模型"""
+    frequency: RecurrenceFrequency = Field(..., description="重复频率")
+    interval: int = Field(1, ge=1, le=365, description="间隔数（如每2周的2）")
+    days_of_week: Optional[List[int]] = Field(None, description="星期几（0=周一，6=周日），仅weekly时使用")
+    day_of_month: Optional[int] = Field(None, ge=1, le=31, description="每月的第几天，仅monthly时使用")
+    end_date: Optional[datetime] = Field(None, description="重复结束日期")
+    count: Optional[int] = Field(None, ge=1, description="重复次数限制")
+
 class TaskBase(BaseModel):
     """任务基础模型"""
     title: str = Field(..., min_length=1, max_length=200, description="任务标题")
     start: datetime = Field(..., description="开始时间（ISO 8601格式）")
     end: Optional[datetime] = Field(None, description="结束时间（ISO 8601格式，可选）")
     priority: Optional[TaskPriority] = Field(TaskPriority.MEDIUM, description="任务优先级")
+    recurrence_rule: Optional[RecurrenceRule] = Field(None, description="重复规则（可选）")
+    is_recurring: bool = Field(False, description="是否为重复任务")
+    parent_task_id: Optional[str] = Field(None, description="父任务ID（用于重复任务实例）")
 
 class TaskCreate(TaskBase):
     """创建任务请求模型"""

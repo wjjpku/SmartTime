@@ -38,6 +38,9 @@ export default function Home() {
       const newTasks = await parseAndCreateTasks(inputText);
       setInputText('');
       
+      // 刷新任务列表以确保显示所有重复任务实例
+      await fetchTasks();
+      
       // 显示任务创建结果
       setCreatedTasks(newTasks);
       setOriginalInputText(currentInputText);
@@ -69,16 +72,35 @@ export default function Home() {
     setShowModal(true);
   };
 
-  const calendarEvents = tasks.map(task => ({
-    id: task.id,
-    title: task.title,
-    start: task.start,
-    end: task.end,
-    backgroundColor: task.priority === 'high' ? '#ef4444' : 
-                    task.priority === 'medium' ? '#f59e0b' : '#10b981',
-    borderColor: task.priority === 'high' ? '#dc2626' : 
-                task.priority === 'medium' ? '#d97706' : '#059669'
-  }));
+  const calendarEvents = tasks.map(task => {
+    // 基础颜色根据优先级
+    let backgroundColor = task.priority === 'high' ? '#ef4444' : 
+                         task.priority === 'medium' ? '#f59e0b' : '#10b981';
+    let borderColor = task.priority === 'high' ? '#dc2626' : 
+                     task.priority === 'medium' ? '#d97706' : '#059669';
+    
+    // 重复任务使用渐变色和特殊边框
+    if (task.is_recurring) {
+      backgroundColor = task.priority === 'high' ? '#f87171' : 
+                       task.priority === 'medium' ? '#fbbf24' : '#34d399';
+      borderColor = '#6366f1'; // 紫色边框表示重复任务
+    }
+    
+    return {
+      id: task.id,
+      title: task.is_recurring ? `🔄 ${task.title}` : task.title,
+      start: task.start,
+      end: task.end,
+      backgroundColor,
+      borderColor,
+      borderWidth: task.is_recurring ? 2 : 1,
+      extendedProps: {
+        isRecurring: task.is_recurring,
+        recurrenceRule: task.recurrence_rule,
+        parentTaskId: task.parent_task_id
+      }
+    };
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">

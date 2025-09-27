@@ -1,6 +1,16 @@
 import { create } from 'zustand';
 import axios from 'axios';
 
+// 重复规则接口定义
+export interface RecurrenceRule {
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  interval: number;
+  days_of_week?: number[];
+  day_of_month?: number;
+  end_date?: string;
+  count?: number;
+}
+
 // 任务接口定义
 export interface Task {
   id: string;
@@ -8,6 +18,9 @@ export interface Task {
   start: string;
   end?: string;
   priority: 'low' | 'medium' | 'high';
+  recurrence_rule?: RecurrenceRule;
+  is_recurring: boolean;
+  parent_task_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -17,6 +30,9 @@ export interface TaskCreate {
   start: string;
   end?: string;
   priority?: 'low' | 'medium' | 'high';
+  recurrence_rule?: RecurrenceRule;
+  is_recurring?: boolean;
+  parent_task_id?: string;
 }
 
 export interface TaskUpdate {
@@ -24,6 +40,9 @@ export interface TaskUpdate {
   start?: string;
   end?: string;
   priority?: 'low' | 'medium' | 'high';
+  recurrence_rule?: RecurrenceRule;
+  is_recurring?: boolean;
+  parent_task_id?: string;
 }
 
 // API 基础配置

@@ -45,29 +45,57 @@ class DeepSeekService:
    - "后天" = {day_after_tomorrow_date}
    - "下周一" = 下一个星期一的日期
    - "下周" = 从下周一开始的一周
-3. 估算任务优先级（high/medium/low）
-4. 如果没有明确的结束时间，根据任务类型估算合理的持续时间
+3. 识别重复模式：
+   - "每天"、"每日" = daily频率
+   - "每周"、"每星期" = weekly频率
+   - "每月" = monthly频率
+   - "每年" = yearly频率
+   - "每周一"、"每周二"等 = weekly频率，指定星期几
+   - "每隔X天/周/月" = 对应频率，间隔为X
+4. 估算任务优先级（high/medium/low）
+5. 如果没有明确的结束时间，根据任务类型估算合理的持续时间
 
 返回格式要求：
 - 必须返回有效的 JSON 数组格式
 - 每个任务包含：title（字符串）、start（ISO 8601格式）、end（ISO 8601格式，可选）、priority（high/medium/low）
+- 对于重复任务，额外包含：is_recurring（布尔值）、recurrence_rule（重复规则对象）
+- 重复规则对象包含：frequency（daily/weekly/monthly/yearly）、interval（间隔数）、days_of_week（星期几数组，0=周一）、end_date（结束日期，可选）
 - 时间格式示例："2024-01-15T09:00:00"
 - 如果用户描述包含多个任务，返回多个任务对象
 
-示例输入："明天上午9点开会，下午写报告"
-示例输出：
+示例输入1："明天上午9点开会，下午写报告"
+示例输出1：
 [
   {{
     "title": "开会",
     "start": "{tomorrow_date}T09:00:00",
     "end": "{tomorrow_date}T10:00:00",
-    "priority": "high"
+    "priority": "high",
+    "is_recurring": false
   }},
   {{
     "title": "写报告",
     "start": "{tomorrow_date}T14:00:00",
     "end": "{tomorrow_date}T17:00:00",
-    "priority": "medium"
+    "priority": "medium",
+    "is_recurring": false
+  }}
+]
+
+示例输入2："每周二晚8点开组会"
+示例输出2：
+[
+  {{
+    "title": "开组会",
+    "start": "2024-01-16T20:00:00",
+    "end": "2024-01-16T21:00:00",
+    "priority": "high",
+    "is_recurring": true,
+    "recurrence_rule": {{
+      "frequency": "weekly",
+      "interval": 1,
+      "days_of_week": [1]
+    }}
   }}
 ]
 
@@ -168,11 +196,40 @@ class DeepSeekService:
                         else:
                             priority = TaskPriority.MEDIUM
                         
+                        # 处理重复规则
+                        is_recurring = task_data.get("is_recurring", False)
+                        recurrence_rule = None
+                        
+                        if is_recurring and "recurrence_rule" in task_data:
+                            rule_data = task_data["recurrence_rule"]
+                            from app.models.task import RecurrenceRule, RecurrenceFrequency
+                            
+                            # 解析频率
+                            frequency_str = rule_data.get("frequency", "weekly").lower()
+                            frequency = RecurrenceFrequency.WEEKLY  # 默认值
+                            if frequency_str == "daily":
+                                frequency = RecurrenceFrequency.DAILY
+                            elif frequency_str == "weekly":
+                                frequency = RecurrenceFrequency.WEEKLY
+                            elif frequency_str == "monthly":
+                                frequency = RecurrenceFrequency.MONTHLY
+                            elif frequency_str == "yearly":
+                                frequency = RecurrenceFrequency.YEARLY
+                            
+                            recurrence_rule = RecurrenceRule(
+                                frequency=frequency,
+                                interval=rule_data.get("interval", 1),
+                                days_of_week=rule_data.get("days_of_week", []),
+                                end_date=None  # 暂时不处理结束日期
+                            )
+                        
                         task = TaskCreate(
                             title=task_data["title"],
                             start=start_time,
                             end=end_time,
-                            priority=priority
+                            priority=priority,
+                            is_recurring=is_recurring,
+                            recurrence_rule=recurrence_rule
                         )
                         tasks.append(task)
                     

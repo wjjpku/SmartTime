@@ -8,10 +8,10 @@
 
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from pathlib import Path
-from app.models import Task, TaskCreate, TaskUpdate, TaskPriority
+from app.models import Task, TaskCreate, TaskUpdate, TaskPriority, RecurrenceRule, RecurrenceFrequency
 
 class TaskService:
     """任务服务类"""
@@ -60,27 +60,172 @@ class TaskService:
     
     def _dict_to_task(self, task_dict: Dict[str, Any]) -> Task:
         """将字典转换为Task对象"""
+        # 解析重复规则
+        recurrence_rule = None
+        if task_dict.get("recurrence_rule"):
+            rule_dict = task_dict["recurrence_rule"]
+            recurrence_rule = RecurrenceRule(
+                frequency=RecurrenceFrequency(rule_dict["frequency"]),
+                interval=rule_dict.get("interval", 1),
+                days_of_week=rule_dict.get("days_of_week"),
+                day_of_month=rule_dict.get("day_of_month"),
+                end_date=datetime.fromisoformat(rule_dict["end_date"]) if rule_dict.get("end_date") else None,
+                count=rule_dict.get("count")
+            )
+        
         return Task(
             id=task_dict["id"],
             title=task_dict["title"],
             start=datetime.fromisoformat(task_dict["start"]),
             end=datetime.fromisoformat(task_dict["end"]) if task_dict.get("end") else None,
             priority=TaskPriority(task_dict.get("priority", "medium")),
+            recurrence_rule=recurrence_rule,
+            is_recurring=task_dict.get("is_recurring", False),
+            parent_task_id=task_dict.get("parent_task_id"),
             created_at=datetime.fromisoformat(task_dict["created_at"]),
             updated_at=datetime.fromisoformat(task_dict["updated_at"])
         )
     
     def _task_to_dict(self, task: Task) -> Dict[str, Any]:
         """将Task对象转换为字典"""
-        return {
+        task_dict = {
             "id": task.id,
             "title": task.title,
             "start": task.start.isoformat(),
             "end": task.end.isoformat() if task.end else None,
             "priority": task.priority.value,
+            "is_recurring": task.is_recurring,
+            "parent_task_id": task.parent_task_id,
             "created_at": task.created_at.isoformat(),
             "updated_at": task.updated_at.isoformat()
         }
+        
+        # 序列化重复规则
+        if task.recurrence_rule:
+            rule_dict = {
+                "frequency": task.recurrence_rule.frequency.value,
+                "interval": task.recurrence_rule.interval
+            }
+            if task.recurrence_rule.days_of_week:
+                rule_dict["days_of_week"] = task.recurrence_rule.days_of_week
+            if task.recurrence_rule.day_of_month:
+                rule_dict["day_of_month"] = task.recurrence_rule.day_of_month
+            if task.recurrence_rule.end_date:
+                rule_dict["end_date"] = task.recurrence_rule.end_date.isoformat()
+            if task.recurrence_rule.count:
+                rule_dict["count"] = task.recurrence_rule.count
+            task_dict["recurrence_rule"] = rule_dict
+        
+        return task_dict
+    
+    def _generate_recurring_tasks(self, parent_task: Task, max_instances: int = 52) -> List[Task]:
+        """生成重复任务实例"""
+        if not parent_task.recurrence_rule:
+            return []
+        
+        recurring_tasks = []
+        rule = parent_task.recurrence_rule
+        current_start = parent_task.start
+        current_end = parent_task.end
+        
+        # 计算任务持续时间
+        duration = None
+        if current_end:
+            duration = current_end - current_start
+        
+        # 生成重复实例
+        for i in range(1, max_instances + 1):
+            # 计算下一个实例的开始时间
+            next_start = self._calculate_next_occurrence(current_start, rule, i)
+            
+            # 检查是否超过结束日期
+            if rule.end_date and next_start > rule.end_date:
+                break
+            
+            # 检查是否达到重复次数限制
+            if rule.count and i >= rule.count:
+                break
+            
+            # 计算结束时间
+            next_end = None
+            if duration:
+                next_end = next_start + duration
+            
+            # 创建重复任务实例
+            recurring_task = Task(
+                id=self._generate_task_id(),
+                title=parent_task.title,
+                start=next_start,
+                end=next_end,
+                priority=parent_task.priority,
+                recurrence_rule=None,  # 实例不包含重复规则
+                is_recurring=False,    # 实例不是重复任务
+                parent_task_id=parent_task.id,  # 关联父任务
+                created_at=parent_task.created_at,
+                updated_at=parent_task.updated_at
+            )
+            
+            recurring_tasks.append(recurring_task)
+        
+        return recurring_tasks
+    
+    def _calculate_next_occurrence(self, start_time: datetime, rule: RecurrenceRule, occurrence_number: int) -> datetime:
+        """计算下一个重复实例的时间"""
+        if rule.frequency == RecurrenceFrequency.DAILY:
+            return start_time + timedelta(days=rule.interval * occurrence_number)
+        
+        elif rule.frequency == RecurrenceFrequency.WEEKLY:
+            if rule.days_of_week:
+                # 如果指定了星期几，计算下一个匹配的日期
+                days_ahead = 0
+                current_weekday = start_time.weekday()
+                target_weekday = rule.days_of_week[0]  # 取第一个指定的星期几
+                
+                if occurrence_number == 1:
+                    # 第一次重复，找到下一个匹配的星期几
+                    days_ahead = (target_weekday - current_weekday) % 7
+                    if days_ahead == 0:  # 如果是同一天，则是下周
+                        days_ahead = 7
+                else:
+                    # 后续重复，按周间隔计算
+                    days_ahead = (target_weekday - current_weekday) % 7
+                    if days_ahead == 0 and occurrence_number > 1:
+                        days_ahead = 7
+                    days_ahead += 7 * rule.interval * (occurrence_number - 1)
+                
+                return start_time + timedelta(days=days_ahead)
+            else:
+                return start_time + timedelta(weeks=rule.interval * occurrence_number)
+        
+        elif rule.frequency == RecurrenceFrequency.MONTHLY:
+            # 简化的月度重复计算
+            months_to_add = rule.interval * occurrence_number
+            year = start_time.year
+            month = start_time.month + months_to_add
+            
+            # 处理年份溢出
+            while month > 12:
+                year += 1
+                month -= 12
+            
+            try:
+                return start_time.replace(year=year, month=month)
+            except ValueError:
+                # 处理日期不存在的情况（如2月30日）
+                # 使用该月的最后一天
+                import calendar
+                last_day = calendar.monthrange(year, month)[1]
+                day = min(start_time.day, last_day)
+                return start_time.replace(year=year, month=month, day=day)
+        
+        elif rule.frequency == RecurrenceFrequency.YEARLY:
+            try:
+                return start_time.replace(year=start_time.year + rule.interval * occurrence_number)
+            except ValueError:
+                # 处理闰年2月29日的情况
+                return start_time.replace(year=start_time.year + rule.interval * occurrence_number, day=28)
+        
+        return start_time
     
     async def create_task(self, task_create: TaskCreate) -> Task:
         """创建新任务"""
@@ -93,6 +238,9 @@ class TaskService:
             start=task_create.start,
             end=task_create.end,
             priority=task_create.priority or TaskPriority.MEDIUM,
+            recurrence_rule=task_create.recurrence_rule,
+            is_recurring=task_create.is_recurring,
+            parent_task_id=task_create.parent_task_id,
             created_at=now,
             updated_at=now
         )
@@ -100,6 +248,13 @@ class TaskService:
         # 保存到文件
         data = self._load_data()
         data["tasks"].append(self._task_to_dict(task))
+        
+        # 如果是重复任务，生成未来的实例
+        if task.is_recurring and task.recurrence_rule:
+            recurring_tasks = self._generate_recurring_tasks(task)
+            for recurring_task in recurring_tasks:
+                data["tasks"].append(self._task_to_dict(recurring_task))
+        
         self._save_data(data)
         
         return task
