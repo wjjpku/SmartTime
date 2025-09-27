@@ -41,7 +41,7 @@ export default function Login() {
         }
       } else {
         toast.success('登录成功！')
-        navigate('/')
+        navigate('/dashboard')
       }
     } catch (err) {
       toast.error('登录过程中发生错误')

@@ -21,6 +21,7 @@ from app.models import (
 )
 from app.services.task_service import TaskService
 from app.services.deepseek_service import DeepSeekService
+from app.services.reminder_service import ReminderService
 from app.utils.config import get_settings
 import logging
 
@@ -32,6 +33,7 @@ router = APIRouter()
 # 初始化服务
 task_service = TaskService()
 deepseek_service = DeepSeekService(get_settings())
+reminder_service = ReminderService()
 
 @router.post("/tasks/parse", response_model=TaskParseResponse)
 async def parse_tasks(request: TaskParseRequest):
@@ -273,4 +275,46 @@ async def delete_tasks_by_month(request: BatchDeleteRequest):
             deleted_tasks=[],
             message="删除本月任务失败",
             error=str(e)
+        )
+
+
+@router.get("/tasks/reminders", response_model=TaskListResponse)
+async def get_reminder_tasks():
+    """获取需要提醒的任务"""
+    try:
+        # 获取所有任务
+        all_tasks = await task_service.get_all_tasks()
+        
+        # 获取需要提醒的任务
+        reminder_tasks = reminder_service.get_pending_reminders(all_tasks)
+        
+        return TaskListResponse(
+            tasks=reminder_tasks,
+            total=len(reminder_tasks)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取提醒任务失败: {str(e)}"
+        )
+
+
+@router.get("/tasks/upcoming", response_model=TaskListResponse)
+async def get_upcoming_tasks():
+    """获取即将到来的任务"""
+    try:
+        # 获取所有任务
+        all_tasks = await task_service.get_all_tasks()
+        
+        # 获取即将到来的任务
+        upcoming_tasks = reminder_service.get_upcoming_reminders(all_tasks)
+        
+        return TaskListResponse(
+            tasks=upcoming_tasks,
+            total=len(upcoming_tasks)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取即将到来的任务失败: {str(e)}"
         )

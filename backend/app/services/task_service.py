@@ -91,6 +91,9 @@ class TaskService:
             recurrence_rule=recurrence_rule,
             is_recurring=task_dict.get("is_recurring", False),
             parent_task_id=task_dict.get("parent_task_id"),
+            reminder_type=task_dict.get("reminder_type", "none"),
+            is_important=task_dict.get("is_important", False),
+            reminder_sent=task_dict.get("reminder_sent", False),
             created_at=datetime.fromisoformat(task_dict["created_at"]),
             updated_at=datetime.fromisoformat(task_dict["updated_at"])
         )
@@ -105,6 +108,9 @@ class TaskService:
             "priority": task.priority.value,
             "is_recurring": task.is_recurring,
             "parent_task_id": task.parent_task_id,
+            "reminder_type": task.reminder_type,
+            "is_important": task.is_important,
+            "reminder_sent": task.reminder_sent,
             "created_at": task.created_at.isoformat(),
             "updated_at": task.updated_at.isoformat()
         }
@@ -250,6 +256,9 @@ class TaskService:
             recurrence_rule=task_create.recurrence_rule,
             is_recurring=task_create.is_recurring,
             parent_task_id=task_create.parent_task_id,
+            reminder_type=task_create.reminder_type,
+            is_important=task_create.is_important,
+            reminder_sent=False,
             created_at=now,
             updated_at=now
         )
@@ -334,6 +343,10 @@ class TaskService:
                     task_dict["end"] = task_update.end.isoformat()
                 if task_update.priority is not None:
                     task_dict["priority"] = task_update.priority.value
+                if task_update.reminder_type is not None:
+                    task_dict["reminder_type"] = task_update.reminder_type
+                if task_update.is_important is not None:
+                    task_dict["is_important"] = task_update.is_important
                 
                 # 更新时间戳
                 task_dict["updated_at"] = datetime.now().isoformat()

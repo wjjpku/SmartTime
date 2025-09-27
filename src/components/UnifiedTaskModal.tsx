@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, Trash2, Calendar, Clock, Flag, Repeat, Plus, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { taskStore, Task, TaskCreate, TaskUpdate, RecurrenceRule } from '../store/taskStore';
-import { toast } from 'react-toastify';
+import ReminderSettings from './ReminderSettings';
+import { useNotification } from './NotificationManager';
 
 interface UnifiedTaskModalProps {
   mode: 'create' | 'edit' | 'delete';
@@ -18,6 +19,8 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
     end: '',
     priority: 'medium' as 'low' | 'medium' | 'high',
     is_recurring: false,
+    reminder_type: 'none',
+    is_important: false,
     recurrence_rule: {
       frequency: 'weekly' as 'daily' | 'weekly' | 'monthly' | 'yearly',
       interval: 1,
@@ -31,6 +34,7 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
   const [isLoading, setIsLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { createTask, updateTask, deleteTask } = taskStore();
+  const { showSuccess, showError, showInfo } = useNotification();
   
   const isEditing = mode === 'edit' && task && 'id' in task && task.id;
   const isDeleting = mode === 'delete';
@@ -44,6 +48,8 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
         end: task.end ? formatDateTimeLocal(new Date(task.end)) : '',
         priority: task.priority || 'medium',
         is_recurring: task.is_recurring || false,
+        reminder_type: (task as any).reminder_type || 'none',
+        is_important: (task as any).is_important || false,
         recurrence_rule: task.recurrence_rule ? {
           frequency: task.recurrence_rule.frequency || 'weekly',
           interval: task.recurrence_rule.interval || 1,
@@ -80,12 +86,12 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
     }
     
     if (!formData.title.trim()) {
-      toast.error('请输入任务标题');
+      showError('请输入任务标题');
       return;
     }
     
     if (!formData.start) {
-      toast.error('请选择开始时间');
+      showError('请选择开始时间');
       return;
     }
 
@@ -97,7 +103,9 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
         start: new Date(formData.start).toISOString(),
         end: formData.end ? new Date(formData.end).toISOString() : undefined,
         priority: formData.priority,
-        is_recurring: formData.is_recurring
+        is_recurring: formData.is_recurring,
+        reminder_type: formData.reminder_type,
+        is_important: formData.is_important
       };
       
       // 如果是重复任务，添加重复规则
@@ -113,15 +121,15 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
 
       if (isEditing) {
         await updateTask(task.id!, taskData as TaskUpdate);
-        toast.success('任务更新成功！');
+        showSuccess('任务更新成功！');
       } else {
         await createTask(taskData as TaskCreate);
-        toast.success('任务创建成功！');
+        showSuccess('任务创建成功！');
       }
       
       onSave();
     } catch (error) {
-      toast.error(isEditing ? '更新任务失败' : '创建任务失败');
+      showError(isEditing ? '更新任务失败' : '创建任务失败');
     } finally {
       setIsLoading(false);
     }
@@ -129,7 +137,7 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
 
   const handleDeleteSubmit = async () => {
     if (!deleteText.trim()) {
-      toast.error('请输入要删除的任务描述');
+      showError('请输入要删除的任务描述');
       return;
     }
 
@@ -153,14 +161,14 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
       setDeleteText('');
       
       if (result.deleted_count > 0) {
-        toast.success(`成功删除了 ${result.deleted_count} 个任务！`);
+        showSuccess(`成功删除了 ${result.deleted_count} 个任务！`);
       } else {
-        toast.info('没有找到匹配的任务');
+        showInfo('没有找到匹配的任务');
       }
       
       onSave();
     } catch (error) {
-      toast.error('删除任务失败，请重试');
+      showError('删除任务失败，请重试');
     } finally {
       setIsLoading(false);
     }
@@ -179,10 +187,10 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
     
     try {
       await deleteTask(task.id);
-      toast.success('任务删除成功！');
+      showSuccess('任务删除成功！');
       onSave();
     } catch (error) {
-      toast.error('删除任务失败');
+      showError('删除任务失败');
     } finally {
       setIsLoading(false);
     }
@@ -343,6 +351,15 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                   ))}
                 </div>
               </div>
+
+              {/* 提醒设置 */}
+              <ReminderSettings
+                reminderType={formData.reminder_type}
+                isImportant={formData.is_important}
+                onReminderTypeChange={(type) => setFormData({ ...formData, reminder_type: type })}
+                onImportantChange={(important) => setFormData({ ...formData, is_important: important })}
+                disabled={isLoading}
+              />
 
               {/* 重复任务设置 */}
               {!isEditing && (

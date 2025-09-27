@@ -32,6 +32,18 @@ class DeepSeekService:
         tomorrow_date = (current_datetime + timedelta(days=1)).strftime("%Y-%m-%d")
         day_after_tomorrow_date = (current_datetime + timedelta(days=2)).strftime("%Y-%m-%d")
         
+        # 计算下周各天的日期
+        days_until_next_monday = (7 - current_datetime.weekday()) % 7
+        if days_until_next_monday == 0:  # 如果今天是周一，下周一是7天后
+            days_until_next_monday = 7
+        next_monday = (current_datetime + timedelta(days=days_until_next_monday)).strftime("%Y-%m-%d")
+        next_tuesday = (current_datetime + timedelta(days=days_until_next_monday + 1)).strftime("%Y-%m-%d")
+        next_wednesday = (current_datetime + timedelta(days=days_until_next_monday + 2)).strftime("%Y-%m-%d")
+        next_thursday = (current_datetime + timedelta(days=days_until_next_monday + 3)).strftime("%Y-%m-%d")
+        next_friday = (current_datetime + timedelta(days=days_until_next_monday + 4)).strftime("%Y-%m-%d")
+        next_saturday = (current_datetime + timedelta(days=days_until_next_monday + 5)).strftime("%Y-%m-%d")
+        next_sunday = (current_datetime + timedelta(days=days_until_next_monday + 6)).strftime("%Y-%m-%d")
+        
         return f"""你是一个智能任务解析助手，专门将自然语言描述转换为结构化的任务信息。
 
 当前时间信息：
@@ -41,20 +53,56 @@ class DeepSeekService:
 解析规则：
 1. 识别任务标题（动作或事件名称）
 2. 解析时间信息，基于当前时间准确理解相对时间：
-   - "今天" = {current_date_str}
-   - "明天" = {tomorrow_date}
+   - "今天"、"今日" = {current_date_str}
+   - "明天"、"明日" = {tomorrow_date}
    - "后天" = {day_after_tomorrow_date}
-   - "下周一" = 下一个星期一的日期
-   - "下周" = 从下周一开始的一周
-3. 识别重复模式：
-   - "每天"、"每日" = daily频率
-   - "每周"、"每星期" = weekly频率
-   - "每月" = monthly频率
-   - "每年" = yearly频率
+   - "下周一" = {next_monday}
+   - "下周二" = {next_tuesday}
+   - "下周三" = {next_wednesday}
+   - "下周四" = {next_thursday}
+   - "下周五" = {next_friday}
+   - "下周六" = {next_saturday}
+   - "下周日" = {next_sunday}
+   - "这周一"、"本周一" = 本周的星期一
+   - "这周五"、"本周五" = 本周的星期五
+   - "下个月" = 下个月的同一天
+   - "月底" = 本月最后一天
+   - "月初" = 下个月第一天
+   - "X天后"、"X天之后" = 当前日期+X天
+   - "X小时后"、"X小时之后" = 当前时间+X小时
+   - "一会儿"、"稍后" = 当前时间+1小时
+   - "晚些时候" = 当前时间+3小时
+3. 解析具体时间表达：
+   - "上午"、"早上" = 09:00
+   - "中午" = 12:00
+   - "下午" = 14:00
+   - "傍晚" = 18:00
+   - "晚上" = 20:00
+   - "深夜" = 23:00
+   - "X点"、"X时" = X:00
+   - "X点半" = X:30
+   - "X点Y分" = X:Y
+   - "X:Y" = X:Y
+4. 识别重复模式：
+   - "每天"、"每日"、"天天" = daily频率
+   - "每周"、"每星期"、"周周" = weekly频率
+   - "每月"、"月月" = monthly频率
+   - "每年"、"年年" = yearly频率
    - "每周一"、"每周二"等 = weekly频率，指定星期几
-   - "每隔X天/周/月" = 对应频率，间隔为X
-4. 估算任务优先级（high/medium/low）
-5. 如果没有明确的结束时间，根据任务类型估算合理的持续时间
+   - "每隔X天/周/月/年" = 对应频率，间隔为X
+   - "工作日"、"周一到周五" = weekly频率，周一到周五
+   - "周末" = weekly频率，周六和周日
+5. 估算任务优先级（high/medium/low）：
+   - 包含"紧急"、"重要"、"必须"、"会议"、"面试"、"考试" = high
+   - 包含"一般"、"普通"、"可以"、"建议" = medium
+   - 包含"随便"、"有空"、"闲暇"、"休息" = low
+6. 智能持续时间估算：
+   - 会议、面试：1-2小时
+   - 学习、工作：2-4小时
+   - 吃饭：1小时
+   - 运动：1-2小时
+   - 购物：2-3小时
+   - 休息、娱乐：1-2小时
 
 返回格式要求：
 - 必须返回有效的 JSON 数组格式
@@ -218,18 +266,88 @@ class DeepSeekService:
         return description[:20] if len(description) <= 20 else description[:17] + "..."
     
     def _parse_relative_time(self, text: str) -> datetime:
-        """解析相对时间表达式（简单实现）"""
+        """解析相对时间表达式（增强实现）"""
+        import re
         now = datetime.now()
         
-        # 简单的时间解析逻辑
-        if "明天" in text:
+        # 解析数字+时间单位的表达
+        days_match = re.search(r'(\d+)天[后之]?后?', text)
+        if days_match:
+            days = int(days_match.group(1))
+            return now + timedelta(days=days)
+        
+        hours_match = re.search(r'(\d+)小时[后之]?后?', text)
+        if hours_match:
+            hours = int(hours_match.group(1))
+            return now + timedelta(hours=hours)
+        
+        # 解析相对时间词汇
+        if "明天" in text or "明日" in text:
             return now + timedelta(days=1)
         elif "后天" in text:
             return now + timedelta(days=2)
         elif "下周" in text:
-            return now + timedelta(days=7)
+            # 如果指定了具体星期几
+            if "下周一" in text:
+                days_until_next_monday = (7 - now.weekday()) % 7
+                if days_until_next_monday == 0:
+                    days_until_next_monday = 7
+                return now + timedelta(days=days_until_next_monday)
+            elif "下周二" in text:
+                days_until_next_tuesday = (8 - now.weekday()) % 7
+                if days_until_next_tuesday == 0:
+                    days_until_next_tuesday = 7
+                return now + timedelta(days=days_until_next_tuesday)
+            elif "下周三" in text:
+                days_until_next_wednesday = (9 - now.weekday()) % 7
+                if days_until_next_wednesday == 0:
+                    days_until_next_wednesday = 7
+                return now + timedelta(days=days_until_next_wednesday)
+            elif "下周四" in text:
+                days_until_next_thursday = (10 - now.weekday()) % 7
+                if days_until_next_thursday == 0:
+                    days_until_next_thursday = 7
+                return now + timedelta(days=days_until_next_thursday)
+            elif "下周五" in text:
+                days_until_next_friday = (11 - now.weekday()) % 7
+                if days_until_next_friday == 0:
+                    days_until_next_friday = 7
+                return now + timedelta(days=days_until_next_friday)
+            elif "下周六" in text:
+                days_until_next_saturday = (12 - now.weekday()) % 7
+                if days_until_next_saturday == 0:
+                    days_until_next_saturday = 7
+                return now + timedelta(days=days_until_next_saturday)
+            elif "下周日" in text:
+                days_until_next_sunday = (13 - now.weekday()) % 7
+                if days_until_next_sunday == 0:
+                    days_until_next_sunday = 7
+                return now + timedelta(days=days_until_next_sunday)
+            else:
+                # 默认下周一
+                days_until_next_monday = (7 - now.weekday()) % 7
+                if days_until_next_monday == 0:
+                    days_until_next_monday = 7
+                return now + timedelta(days=days_until_next_monday)
         elif "今天" in text or "今日" in text:
             return now
+        elif "一会儿" in text or "稍后" in text:
+            return now + timedelta(hours=1)
+        elif "晚些时候" in text:
+            return now + timedelta(hours=3)
+        elif "下个月" in text:
+            # 简单处理：加30天
+            return now + timedelta(days=30)
+        elif "月底" in text:
+            # 本月最后一天
+            next_month = now.replace(day=28) + timedelta(days=4)
+            return next_month - timedelta(days=next_month.day)
+        elif "月初" in text:
+            # 下个月第一天
+            if now.month == 12:
+                return now.replace(year=now.year + 1, month=1, day=1)
+            else:
+                return now.replace(month=now.month + 1, day=1)
         else:
             # 默认返回明天
             return now + timedelta(days=1)
@@ -362,45 +480,127 @@ class DeepSeekService:
     async def _fallback_parse(self, text: str) -> List[TaskCreate]:
         """备用解析方法（当 API 调用失败时使用）"""
         try:
-            # 简单的关键词匹配和时间解析
-            base_time = self._parse_relative_time(text)
-            
-            # 提取可能的任务标题
             import re
             
-            # 查找动词 + 名词的模式
+            # 解析时间信息
+            base_time = self._parse_relative_time(text)
+            
+            # 解析具体时间
+            time_hour = 9  # 默认上午9点
+            time_minute = 0
+            
+            # 解析时间表达
+            if "上午" in text or "早上" in text:
+                time_hour = 9
+            elif "中午" in text:
+                time_hour = 12
+            elif "下午" in text:
+                time_hour = 14
+            elif "傍晚" in text:
+                time_hour = 18
+            elif "晚上" in text:
+                time_hour = 20
+            elif "深夜" in text:
+                time_hour = 23
+            
+            # 解析具体时间点
+            time_match = re.search(r'(\d{1,2})[点时](?:(\d{1,2})分)?', text)
+            if time_match:
+                time_hour = int(time_match.group(1))
+                if time_match.group(2):
+                    time_minute = int(time_match.group(2))
+            
+            # 解析X点半
+            half_time_match = re.search(r'(\d{1,2})点半', text)
+            if half_time_match:
+                time_hour = int(half_time_match.group(1))
+                time_minute = 30
+            
+            # 解析X:Y格式
+            colon_time_match = re.search(r'(\d{1,2}):(\d{1,2})', text)
+            if colon_time_match:
+                time_hour = int(colon_time_match.group(1))
+                time_minute = int(colon_time_match.group(2))
+            
+            # 查找动词 + 名词的模式（扩展）
             task_patterns = [
-                r'(开会|会议)',
-                r'(写|编写|完成).*?(报告|文档|作业)',
-                r'(学习|复习).*?(课程|知识)',
-                r'(购买|买).*?(东西|物品)',
-                r'(锻炼|运动|健身)',
-                r'(吃饭|用餐|午餐|晚餐)',
+                r'(开会|会议|面试|讨论)',
+                r'(写|编写|完成|提交).*?(报告|文档|作业|方案|计划)',
+                r'(学习|复习|预习|研究).*?(课程|知识|资料|内容)',
+                r'(购买|买|采购).*?(东西|物品|用品|设备)',
+                r'(锻炼|运动|健身|跑步|游泳)',
+                r'(吃饭|用餐|午餐|晚餐|早餐|聚餐)',
+                r'(休息|放松|娱乐|看电影|听音乐)',
+                r'(打电话|联系|沟通|交流)',
+                r'(检查|查看|审核|确认)',
+                r'(整理|清理|收拾|打扫)',
             ]
             
             tasks = []
             
             # 如果包含"和"、"，"等分隔符，尝试分割多个任务
-            task_parts = re.split(r'[，,、和及以及然后接着]', text)
+            task_parts = re.split(r'[，,、和及以及然后接着还有另外]', text)
             
             for i, part in enumerate(task_parts):
                 part = part.strip()
                 if not part:
                     continue
                 
-                # 设置开始时间（每个任务间隔2小时）
-                start_time = base_time.replace(hour=9 + i * 2, minute=0, second=0, microsecond=0)
-                end_time = start_time + timedelta(hours=1)  # 默认1小时持续时间
+                # 设置开始时间
+                if i == 0:
+                    start_time = base_time.replace(hour=time_hour, minute=time_minute, second=0, microsecond=0)
+                else:
+                    # 后续任务间隔2小时
+                    start_time = base_time.replace(hour=min(23, time_hour + i * 2), minute=time_minute, second=0, microsecond=0)
                 
-                # 简单的优先级判断
+                # 智能估算持续时间
+                duration_hours = 1  # 默认1小时
+                if any(word in part for word in ['会议', '面试', '开会']):
+                    duration_hours = 1.5
+                elif any(word in part for word in ['学习', '工作', '写', '编写']):
+                    duration_hours = 2
+                elif any(word in part for word in ['购物', '采购']):
+                    duration_hours = 2.5
+                elif any(word in part for word in ['运动', '锻炼', '健身']):
+                    duration_hours = 1.5
+                elif any(word in part for word in ['吃饭', '用餐', '聚餐']):
+                    duration_hours = 1
+                elif any(word in part for word in ['休息', '娱乐', '放松']):
+                    duration_hours = 1.5
+                
+                end_time = start_time + timedelta(hours=duration_hours)
+                
+                # 智能优先级判断（扩展）
                 priority = TaskPriority.MEDIUM
-                if any(word in part for word in ['重要', '紧急', '会议', '开会']):
+                if any(word in part for word in ['重要', '紧急', '必须', '会议', '开会', '面试', '考试', '截止']):
                     priority = TaskPriority.HIGH
-                elif any(word in part for word in ['简单', '容易', '休息']):
+                elif any(word in part for word in ['简单', '容易', '休息', '随便', '有空', '闲暇']):
                     priority = TaskPriority.LOW
                 
+                # 生成更好的任务标题
+                title = part
+                # 移除时间相关的词汇，保留核心任务内容
+                time_words = ['今天', '明天', '后天', '上午', '下午', '晚上', '中午', '傍晚', '深夜', 
+                             '一会儿', '稍后', '晚些时候', '下周', '下个月', '月底', '月初']
+                for word in time_words:
+                    title = title.replace(word, '').strip()
+                
+                # 移除数字+时间单位
+                title = re.sub(r'\d+[天小时分钟][后之]?后?', '', title).strip()
+                title = re.sub(r'\d{1,2}[点时](?:\d{1,2}分)?', '', title).strip()
+                title = re.sub(r'\d{1,2}点半', '', title).strip()
+                title = re.sub(r'\d{1,2}:\d{1,2}', '', title).strip()
+                
+                # 如果标题为空或太短，使用原始文本
+                if not title or len(title) < 2:
+                    title = part
+                
+                # 限制标题长度
+                if len(title) > 50:
+                    title = title[:47] + "..."
+                
                 task = TaskCreate(
-                    title=part[:50],  # 限制标题长度
+                    title=title,
                     start=start_time,
                     end=end_time,
                     priority=priority
@@ -409,11 +609,29 @@ class DeepSeekService:
             
             # 如果没有解析出任务，创建一个默认任务
             if not tasks:
-                start_time = base_time.replace(hour=9, minute=0, second=0, microsecond=0)
+                start_time = base_time.replace(hour=time_hour, minute=time_minute, second=0, microsecond=0)
                 end_time = start_time + timedelta(hours=1)
                 
+                # 清理标题
+                title = text
+                time_words = ['今天', '明天', '后天', '上午', '下午', '晚上', '中午', '傍晚', '深夜', 
+                             '一会儿', '稍后', '晚些时候', '下周', '下个月', '月底', '月初']
+                for word in time_words:
+                    title = title.replace(word, '').strip()
+                
+                title = re.sub(r'\d+[天小时分钟][后之]?后?', '', title).strip()
+                title = re.sub(r'\d{1,2}[点时](?:\d{1,2}分)?', '', title).strip()
+                title = re.sub(r'\d{1,2}点半', '', title).strip()
+                title = re.sub(r'\d{1,2}:\d{1,2}', '', title).strip()
+                
+                if not title or len(title) < 2:
+                    title = text
+                
+                if len(title) > 50:
+                    title = title[:47] + "..."
+                
                 task = TaskCreate(
-                    title=text[:50] if len(text) <= 50 else text[:47] + "...",
+                    title=title,
                     start=start_time,
                     end=end_time,
                     priority=TaskPriority.MEDIUM
@@ -430,8 +648,27 @@ class DeepSeekService:
             start_time = tomorrow.replace(hour=9, minute=0, second=0, microsecond=0)
             end_time = start_time + timedelta(hours=1)
             
+            # 清理标题
+            import re
+            title = text
+            time_words = ['今天', '明天', '后天', '上午', '下午', '晚上', '中午', '傍晚', '深夜', 
+                         '一会儿', '稍后', '晚些时候', '下周', '下个月', '月底', '月初']
+            for word in time_words:
+                title = title.replace(word, '').strip()
+            
+            title = re.sub(r'\d+[天小时分钟][后之]?后?', '', title).strip()
+            title = re.sub(r'\d{1,2}[点时](?:\d{1,2}分)?', '', title).strip()
+            title = re.sub(r'\d{1,2}点半', '', title).strip()
+            title = re.sub(r'\d{1,2}:\d{1,2}', '', title).strip()
+            
+            if not title or len(title) < 2:
+                title = text
+            
+            if len(title) > 50:
+                title = title[:47] + "..."
+            
             return [TaskCreate(
-                title=text[:50] if len(text) <= 50 else text[:47] + "...",
+                title=title,
                 start=start_time,
                 end=end_time,
                 priority=TaskPriority.MEDIUM

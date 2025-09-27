@@ -1,20 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, Plus, Send, Loader2, Zap, Trash2, LogOut, User } from 'lucide-react';
+import { Calendar, Plus, Send, Loader2, Zap, Trash2, LogOut, User, HelpCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { toast, ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import { taskStore, Task } from '../store/taskStore';
 import UnifiedTaskModal from '../components/UnifiedTaskModal';
 import TaskResultModal from '../components/TaskResultModal';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotification } from '../components/NotificationManager';
+import TaskReminder from '../components/TaskReminder';
+import TaskFilter from '../components/TaskFilter';
+import DataExport from '../components/DataExport';
+import UserGuide from '../components/UserGuide';
 
 export default function Home() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { showSuccess, showError, showInfo } = useNotification();
   const calendarRef = useRef<FullCalendar>(null);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -27,16 +31,91 @@ export default function Home() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteType, setDeleteType] = useState<'day' | 'week' | 'month'>('day');
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showFilter, setShowFilter] = useState(false);
+  const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);
+  const [isFiltering, setIsFiltering] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [currentView, setCurrentView] = useState('dayGridMonth');
   const [currentDate, setCurrentDate] = useState(new Date()); // 日历当前显示的日期
   const [selectedDate, setSelectedDate] = useState(new Date()); // 用户选中的日期
   const [calendarViewRange, setCalendarViewRange] = useState({ start: new Date(), end: new Date() }); // 日历实际显示的日期范围
+  const [showUserGuide, setShowUserGuide] = useState(false);
+
+
+  // 监听窗口大小变化
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   const { tasks, fetchTasks, parseAndCreateTasks, deleteTask, batchDeleteTasks } = taskStore();
 
   useEffect(() => {
     fetchTasks();
+    
+    // 检查是否是首次使用，如果是则显示用户引导
+    const hasViewedGuide = localStorage.getItem('smarttime_guide_viewed');
+    if (!hasViewedGuide) {
+      setTimeout(() => {
+        setShowUserGuide(true);
+      }, 1000); // 延迟1秒显示，让用户先看到界面
+    }
   }, [fetchTasks]);
+
+  // 添加快捷键支持
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 检查是否在输入框中，如果是则不处理快捷键
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true') {
+        return;
+      }
+
+      // 检查是否有模态框打开，如果有则不处理快捷键
+      if (showModal || showResultModal || showDeleteConfirm) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+      const calendar = calendarRef.current;
+      
+      if (calendar) {
+        switch (key) {
+          case 'd':
+            e.preventDefault();
+            calendar.getApi().changeView('timeGridDay');
+            setCurrentView('timeGridDay');
+            showInfo('视图切换', '已切换到日视图');
+            break;
+          case 'w':
+            e.preventDefault();
+            calendar.getApi().changeView('timeGridWeek');
+            setCurrentView('timeGridWeek');
+            showInfo('视图切换', '已切换到周视图');
+            break;
+          case 'm':
+            e.preventDefault();
+            calendar.getApi().changeView('dayGridMonth');
+            setCurrentView('dayGridMonth');
+            showInfo('视图切换', '已切换到月视图');
+            break;
+          case 't':
+            e.preventDefault();
+            calendar.getApi().today();
+            showInfo('导航', '已回到今天');
+            break;
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showModal, showResultModal, showDeleteConfirm]);
 
   // 添加按钮点击监听器来调试视图切换
   useEffect(() => {
@@ -95,7 +174,7 @@ export default function Home() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim()) {
-      toast.error('请输入任务描述');
+      showError('输入错误', '请输入任务描述');
       return;
     }
 
@@ -113,9 +192,9 @@ export default function Home() {
       setOriginalInputText(currentInputText);
       setShowResultModal(true);
       
-      toast.success(`成功创建了 ${newTasks.length} 个任务！`);
+      showSuccess('任务创建成功', `成功创建了 ${newTasks.length} 个任务！`);
     } catch (error) {
-      toast.error('创建任务失败，请重试');
+      showError('创建失败', '任务创建失败，请检查输入内容并重试');
     } finally {
       setIsLoading(false);
     }
@@ -191,9 +270,9 @@ export default function Home() {
       console.log('批量删除结果:', result);
       
       if (result.success) {
-        toast.success(result.message);
+        showSuccess('删除成功', result.message);
       } else {
-        toast.error('删除失败');
+        showError('删除失败', '操作未能完成，请重试');
       }
     } catch (error: any) {
       console.error('批量删除失败:', error);
@@ -217,7 +296,7 @@ export default function Home() {
         errorMessage = error.response.data.detail;
       }
       
-      toast.error(errorMessage);
+      showError('删除失败', errorMessage);
     } finally {
       setIsDeleting(false);
       setShowDeleteConfirm(false);
@@ -338,7 +417,23 @@ export default function Home() {
     setShowModal(true);
   };
 
-  const calendarEvents = tasks.map(task => {
+  // 处理筛选结果
+  const handleFilteredTasks = (filtered: Task[]) => {
+    setFilteredTasks(filtered);
+    setIsFiltering(filtered.length !== tasks.length);
+  };
+
+  // 切换筛选面板
+  const toggleFilter = () => {
+    setShowFilter(!showFilter);
+  };
+
+  // 获取要显示的任务（筛选后的或全部）
+  const getDisplayTasks = () => {
+    return isFiltering ? filteredTasks : tasks;
+  };
+
+  const calendarEvents = getDisplayTasks().map(task => {
     // 基础颜色根据优先级
     let backgroundColor = task.priority === 'high' ? '#ef4444' : 
                          task.priority === 'medium' ? '#f59e0b' : '#10b981';
@@ -372,18 +467,18 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="container mx-auto px-4 py-8">
         {/* 头部区域 */}
-        <div className="flex justify-between items-start mb-8">
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4 lg:gap-0 mb-8">
           {/* 左侧标题 */}
           <div className="flex-1">
-            <h1 className="text-4xl font-bold text-gray-800 mb-2 flex items-center gap-3">
-              <Calendar className="text-blue-600" size={40} />
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-800 mb-2 flex items-center gap-2 lg:gap-3">
+              <Calendar className="text-blue-600" size={32} />
               SmartTime
             </h1>
-            <p className="text-gray-600 text-lg">用自然语言描述您的任务，AI 将自动为您安排日程</p>
+            <p className="text-gray-600 text-sm sm:text-base lg:text-lg">用自然语言描述您的任务，AI 将自动为您安排日程</p>
           </div>
           
           {/* 右侧用户信息 */}
-          <div className="flex items-center gap-4 bg-white rounded-lg shadow-md px-4 py-3">
+          <div className="flex items-center gap-2 sm:gap-4 bg-white rounded-lg shadow-md px-3 sm:px-4 py-2 sm:py-3 self-start lg:self-auto">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                 <User className="text-blue-600" size={16} />
@@ -395,6 +490,14 @@ export default function Home() {
                 <p className="text-gray-500 text-xs">{user?.email}</p>
               </div>
             </div>
+            <button
+              onClick={() => setShowUserGuide(true)}
+              className="flex items-center gap-1 px-3 py-1.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+              title="查看使用指南"
+            >
+              <HelpCircle size={16} />
+              <span className="text-sm">帮助</span>
+            </button>
             <button
               onClick={async () => {
                 try {
@@ -431,16 +534,16 @@ export default function Home() {
                 disabled={isLoading}
               />
             </div>
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
               <button
                 type="button"
                 onClick={() => navigate('/schedule')}
-                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
+                className="px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg text-sm sm:text-base"
               >
-                <Zap size={20} />
+                <Zap size={18} />
                 智能日程安排
               </button>
-              <div className="flex space-x-3">
+              <div className="flex flex-wrap gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -448,10 +551,11 @@ export default function Home() {
                     setModalMode('create');
                     setShowModal(true);
                   }}
-                  className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center gap-2"
+                  className="px-3 sm:px-6 py-2 sm:py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base flex-1 sm:flex-none"
                 >
-                  <Plus size={20} />
-                  手动添加
+                  <Plus size={16} />
+                  <span className="hidden sm:inline">手动添加</span>
+                  <span className="sm:hidden">添加</span>
                 </button>
                 <button
                   type="button"
@@ -460,22 +564,24 @@ export default function Home() {
                     setModalMode('delete');
                     setShowModal(true);
                   }}
-                  className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+                  className="px-3 sm:px-6 py-2 sm:py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base flex-1 sm:flex-none"
                 >
-                  <Trash2 size={20} />
-                  AI 删除
+                  <Trash2 size={16} />
+                  <span className="hidden sm:inline">AI 删除</span>
+                  <span className="sm:hidden">删除</span>
                 </button>
                 <button
                   type="submit"
                   disabled={isLoading || !inputText.trim()}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  className="px-3 sm:px-6 py-2 sm:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base flex-1 sm:flex-none"
                 >
                   {isLoading ? (
-                    <Loader2 className="animate-spin" size={20} />
+                    <Loader2 className="animate-spin" size={16} />
                   ) : (
-                    <Send size={20} />
+                    <Send size={16} />
                   )}
-                  {isLoading ? '解析中...' : 'AI 解析任务'}
+                  <span className="hidden sm:inline">{isLoading ? '解析中...' : 'AI 解析任务'}</span>
+                  <span className="sm:hidden">{isLoading ? '解析中' : 'AI解析'}</span>
                 </button>
               </div>
             </div>
@@ -485,7 +591,7 @@ export default function Home() {
 
 
         {/* 日历展示区域 */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="bg-white rounded-xl shadow-lg p-3 sm:p-6">
             <style>{`
               .fc-deleteButton-button {
                 background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
@@ -514,11 +620,36 @@ export default function Home() {
             headerToolbar={{
               left: 'prev,next today',
               center: 'title',
-              right: 'dayGridMonth,timeGridWeek,timeGridDay deleteButton'
+              right: isMobile ? 'dayGridMonth exportButton' : 'dayGridMonth,timeGridWeek,timeGridDay exportButton filterButton deleteButton'
             }}
 
 
             customButtons={{
+              exportButton: {
+                text: isMobile ? '⋯' : '导出',
+                click: () => {
+                  if (isMobile) {
+                    // 移动端显示菜单
+                    const menu = document.createElement('div');
+                    menu.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end';
+                    menu.innerHTML = `
+                      <div class="bg-white w-full rounded-t-xl p-4 space-y-3">
+                        <button class="w-full py-3 px-4 bg-blue-600 text-white rounded-lg" onclick="document.querySelector('[data-action=export]').click(); this.closest('.fixed').remove();">导出数据</button>
+                        <button class="w-full py-3 px-4 bg-gray-600 text-white rounded-lg" onclick="document.querySelector('[data-action=filter]').click(); this.closest('.fixed').remove();">筛选任务</button>
+                        <button class="w-full py-3 px-4 bg-red-600 text-white rounded-lg" onclick="document.querySelector('[data-action=delete]').click(); this.closest('.fixed').remove();">删除任务</button>
+                        <button class="w-full py-3 px-4 bg-gray-300 text-gray-700 rounded-lg" onclick="this.closest('.fixed').remove();">取消</button>
+                      </div>
+                    `;
+                    document.body.appendChild(menu);
+                  } else {
+                    setShowExport(true);
+                  }
+                }
+              },
+              filterButton: {
+                text: '筛选',
+                click: toggleFilter
+              },
               deleteButton: {
                 text: '', // 初始为空，由useEffect动态更新
                 click: () => {
@@ -671,6 +802,37 @@ export default function Home() {
             }}
           />
         </div>
+        
+        {/* 隐藏的功能按钮，用于移动端菜单调用 */}
+        <button 
+          data-action="export" 
+          className="hidden" 
+          onClick={() => setShowExport(true)}
+        />
+        <button 
+          data-action="filter" 
+          className="hidden" 
+          onClick={toggleFilter}
+        />
+        <button 
+          data-action="delete" 
+          className="hidden" 
+          onClick={() => {
+            const deleteType = getDeleteTypeFromView();
+            handleBatchDelete(deleteType);
+          }}
+        />
+
+        {/* 任务筛选面板 */}
+        {showFilter && (
+          <div className="mt-6">
+            <TaskFilter
+              tasks={tasks}
+              onFilteredTasks={handleFilteredTasks}
+              onClose={() => setShowFilter(false)}
+            />
+          </div>
+        )}
       </div>
 
       {/* 统一任务模态框 */}
@@ -747,17 +909,21 @@ export default function Home() {
         </div>
       )}
 
-      {/* Toast 通知 */}
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        newestOnTop={false}
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
+      {/* 数据导出模态框 */}
+      {showExport && (
+        <DataExport
+          tasks={tasks}
+          onClose={() => setShowExport(false)}
+        />
+      )}
+
+      {/* 任务提醒组件 */}
+      <TaskReminder tasks={tasks} />
+      
+      {/* 用户引导 */}
+      <UserGuide 
+        isOpen={showUserGuide}
+        onClose={() => setShowUserGuide(false)}
       />
     </div>
   );

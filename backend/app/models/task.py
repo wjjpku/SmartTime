@@ -33,6 +33,16 @@ class RecurrenceRule(BaseModel):
     end_date: Optional[datetime] = Field(None, description="重复结束日期")
     count: Optional[int] = Field(None, ge=1, description="重复次数限制")
 
+class ReminderType(str, Enum):
+    """提醒类型枚举"""
+    NONE = "none"  # 无提醒
+    AT_TIME = "at_time"  # 准时提醒
+    BEFORE_5MIN = "before_5min"  # 提前5分钟
+    BEFORE_15MIN = "before_15min"  # 提前15分钟
+    BEFORE_30MIN = "before_30min"  # 提前30分钟
+    BEFORE_1HOUR = "before_1hour"  # 提前1小时
+    BEFORE_1DAY = "before_1day"  # 提前1天
+
 class TaskBase(BaseModel):
     """任务基础模型"""
     title: str = Field(..., min_length=1, max_length=200, description="任务标题")
@@ -42,6 +52,9 @@ class TaskBase(BaseModel):
     recurrence_rule: Optional[RecurrenceRule] = Field(None, description="重复规则（可选）")
     is_recurring: bool = Field(False, description="是否为重复任务")
     parent_task_id: Optional[str] = Field(None, description="父任务ID（用于重复任务实例）")
+    reminder_type: Optional[ReminderType] = Field(ReminderType.NONE, description="提醒类型")
+    is_important: bool = Field(False, description="是否为重要任务（影响提醒优先级）")
+    reminder_sent: bool = Field(False, description="提醒是否已发送（系统字段）")
 
 class TaskCreate(TaskBase):
     """创建任务请求模型"""
@@ -53,6 +66,8 @@ class TaskUpdate(BaseModel):
     start: Optional[datetime] = Field(None, description="开始时间（ISO 8601格式）")
     end: Optional[datetime] = Field(None, description="结束时间（ISO 8601格式）")
     priority: Optional[TaskPriority] = Field(None, description="任务优先级")
+    reminder_type: Optional[ReminderType] = Field(None, description="提醒类型")
+    is_important: Optional[bool] = Field(None, description="是否为重要任务")
 
 class Task(TaskBase):
     """完整任务模型（包含系统字段）"""

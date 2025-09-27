@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     """应用配置类"""
     
     # 应用基本配置
-    app_name: str = "智能任务管理系统"
+    app_name: str = "SmartTime"
     app_version: str = "1.0.0"
     debug: bool = False
     

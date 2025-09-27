@@ -137,7 +137,7 @@ export default function Register() {
               <UserPlus className="h-6 w-6 text-white" />
             </div>
             <h2 className="text-3xl font-bold text-gray-900">创建账户</h2>
-            <p className="text-gray-600 mt-2">加入智能任务管理系统</p>
+            <p className="text-gray-600 mt-2">加入SmartTime</p>
           </div>
 
           {/* 注册表单 */}
