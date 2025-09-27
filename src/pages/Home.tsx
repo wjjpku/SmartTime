@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, Plus, Send, Loader2, Zap, Trash2 } from 'lucide-react';
+import { Calendar, Plus, Send, Loader2, Zap, Trash2, LogOut, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -10,9 +10,11 @@ import 'react-toastify/dist/ReactToastify.css';
 import { taskStore, Task } from '../store/taskStore';
 import UnifiedTaskModal from '../components/UnifiedTaskModal';
 import TaskResultModal from '../components/TaskResultModal';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Home() {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const calendarRef = useRef<FullCalendar>(null);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -51,16 +53,41 @@ export default function Home() {
 
   // 监听currentView变化，手动更新删除按钮文本
   useEffect(() => {
-    if (calendarRef.current) {
-      const calendarApi = calendarRef.current.getApi();
+    const updateDeleteButtonText = () => {
       const deleteButton = document.querySelector('.fc-deleteButton-button');
       if (deleteButton) {
         const newText = getDeleteButtonText();
         deleteButton.textContent = newText;
         console.log('手动更新删除按钮文本:', newText, 'currentView:', currentView);
+      } else {
+        // 如果按钮还没有渲染，稍后再试
+        setTimeout(updateDeleteButtonText, 100);
       }
+    };
+    
+    if (calendarRef.current) {
+      // 添加小延迟确保DOM已更新
+      setTimeout(updateDeleteButtonText, 50);
     }
   }, [currentView]);
+  
+  // 组件挂载后初始化按钮文本
+  useEffect(() => {
+    const initDeleteButtonText = () => {
+      const deleteButton = document.querySelector('.fc-deleteButton-button');
+      if (deleteButton) {
+        const newText = getDeleteButtonText();
+        deleteButton.textContent = newText;
+        console.log('初始化删除按钮文本:', newText);
+      } else {
+        // 如果按钮还没有渲染，稍后再试
+        setTimeout(initDeleteButtonText, 200);
+      }
+    };
+    
+    // 延迟执行以确保FullCalendar完全渲染
+    setTimeout(initDeleteButtonText, 300);
+  }, []);
 
   console.log('Home组件渲染，当前视图:', currentView, '当前日期:', currentDate);
   console.log('FullCalendar按钮测试 - 组件已加载');
@@ -344,13 +371,47 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="container mx-auto px-4 py-8">
-        {/* 头部标题 */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2 flex items-center justify-center gap-3">
-            <Calendar className="text-blue-600" size={40} />
-            SmartTime
-          </h1>
-          <p className="text-gray-600 text-lg">用自然语言描述您的任务，AI 将自动为您安排日程</p>
+        {/* 头部区域 */}
+        <div className="flex justify-between items-start mb-8">
+          {/* 左侧标题 */}
+          <div className="flex-1">
+            <h1 className="text-4xl font-bold text-gray-800 mb-2 flex items-center gap-3">
+              <Calendar className="text-blue-600" size={40} />
+              SmartTime
+            </h1>
+            <p className="text-gray-600 text-lg">用自然语言描述您的任务，AI 将自动为您安排日程</p>
+          </div>
+          
+          {/* 右侧用户信息 */}
+          <div className="flex items-center gap-4 bg-white rounded-lg shadow-md px-4 py-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                <User className="text-blue-600" size={16} />
+              </div>
+              <div className="text-sm">
+                <p className="font-medium text-gray-800">
+                  {user?.user_metadata?.username || user?.email?.split('@')[0] || '用户'}
+                </p>
+                <p className="text-gray-500 text-xs">{user?.email}</p>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  await signOut();
+                  toast.success('已成功登出');
+                  navigate('/login');
+                } catch (error) {
+                  toast.error('登出失败，请重试');
+                }
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+              title="登出"
+            >
+              <LogOut size={16} />
+              <span className="text-sm">登出</span>
+            </button>
+          </div>
         </div>
 
         {/* 任务输入区域 */}
@@ -459,7 +520,7 @@ export default function Home() {
 
             customButtons={{
               deleteButton: {
-                text: getDeleteButtonText(),
+                text: '', // 初始为空，由useEffect动态更新
                 click: () => {
                   const deleteType = getDeleteTypeFromView();
                   console.log('删除按钮点击:', {

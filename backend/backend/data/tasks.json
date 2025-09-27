@@ -601,43 +601,10 @@
       "parent_task_id": "task_6ba566d5",
       "created_at": "2025-09-27T15:19:17.837499",
       "updated_at": "2025-09-27T15:19:17.837499"
-    },
-    {
-      "id": "task_ee2fde1e",
-      "title": "??????",
-      "start": "2025-01-27T10:00:00",
-      "end": "2025-01-27T11:00:00",
-      "priority": "medium",
-      "is_recurring": false,
-      "parent_task_id": null,
-      "created_at": "2025-09-27T19:27:49.587813",
-      "updated_at": "2025-09-27T19:27:49.587813"
-    },
-    {
-      "id": "task_1e028772",
-      "title": "??????",
-      "start": "2025-01-28T14:00:00",
-      "end": "2025-01-28T15:00:00",
-      "priority": "high",
-      "is_recurring": false,
-      "parent_task_id": null,
-      "created_at": "2025-09-27T19:27:59.114980",
-      "updated_at": "2025-09-27T19:27:59.114980"
-    },
-    {
-      "id": "task_69bf1f24",
-      "title": "??????",
-      "start": "2025-01-27T10:00:00",
-      "end": "2025-01-27T11:00:00",
-      "priority": "medium",
-      "is_recurring": false,
-      "parent_task_id": null,
-      "created_at": "2025-09-27T19:29:58.566208",
-      "updated_at": "2025-09-27T19:29:58.566208"
     }
   ],
   "metadata": {
     "version": "1.0",
-    "last_updated": "2025-09-27T19:29:58.567413"
+    "last_updated": "2025-09-27T19:58:43.748475"
   }
 }
