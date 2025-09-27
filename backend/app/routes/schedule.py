@@ -9,7 +9,7 @@
 """
 
 from typing import List
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from app.models.task import (
     ScheduleAnalyzeRequest,
     ScheduleAnalyzeResponse,
@@ -18,6 +18,8 @@ from app.models.task import (
     WorkInfo,
     TimeSlot
 )
+from app.models import TaskParseRequest, TaskParseResponse
+from app.middleware.auth import get_current_user_id
 from app.services.task_service import TaskService
 from app.services.deepseek_service import DeepSeekService
 from app.utils.config import get_settings
@@ -66,6 +68,35 @@ async def analyze_schedule(request: ScheduleAnalyzeRequest):
             success=False,
             work_info=None,
             recommendations=[],
+            error=str(e)
+        )
+
+@router.post("/schedule/parse", response_model=TaskParseResponse)
+async def parse_schedule(request: TaskParseRequest, user_id: str = Depends(get_current_user_id)):
+    """
+    自然语言日程解析接口
+    
+    将用户输入的自然语言描述解析为结构化的任务数据
+    """
+    try:
+        # 调用 DeepSeek API 解析自然语言
+        parsed_tasks = await deepseek_service.parse_tasks(request.text)
+        
+        # 保存解析出的任务到本地存储
+        saved_tasks = []
+        for task_data in parsed_tasks:
+            task = await task_service.create_task(task_data, user_id)
+            saved_tasks.append(task)
+        
+        return TaskParseResponse(
+            success=True,
+            tasks=saved_tasks
+        )
+    
+    except Exception as e:
+        return TaskParseResponse(
+            success=False,
+            tasks=[],
             error=str(e)
         )
 

@@ -21,10 +21,10 @@ class AuthMiddleware:
             import httpx
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    "https://nctpsawrutedkpyjwtrs.supabase.co/auth/v1/user",
+                    f"{settings.supabase_url}/auth/v1/user",
                     headers={
                         "Authorization": f"Bearer {token}",
-                        "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jdHBzYXdydXRlZGtweWp3dHJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5NzI0OTMsImV4cCI6MjA3NDU0ODQ5M30.tzyeBLJ5jQsCwutd5h64Adx-qiG43vr4CdDJE6qVdug"
+                        "apikey": settings.supabase_anon_key
                     }
                 )
                 
@@ -37,7 +37,9 @@ class AuthMiddleware:
                     return None
                     
         except Exception as e:
-            print(f"[AUTH DEBUG] Supabase API验证异常: {e}")
+            print(f"[AUTH DEBUG] Supabase API验证异常: {type(e).__name__}: {str(e)}")
+            import traceback
+            print(f"[AUTH DEBUG] 异常堆栈: {traceback.format_exc()}")
             return None
     
     @staticmethod

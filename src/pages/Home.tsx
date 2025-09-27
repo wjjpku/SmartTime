@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, Plus, Send, Loader2, Zap, Trash2, LogOut, User, HelpCircle } from 'lucide-react';
+import { Calendar, Plus, Send, Loader2, Zap, Trash2, LogOut, User, HelpCircle, BarChart3, Clock, CalendarDays, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -532,75 +532,96 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="container mx-auto px-4 py-8">
-        {/* 头部区域 */}
-        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4 lg:gap-0 mb-8">
-          {/* 左侧标题 */}
-          <div className="flex-1">
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-800 mb-2 flex items-center gap-2 lg:gap-3">
-              <Calendar className="text-blue-600" size={32} />
-              SmartTime
-            </h1>
-            <div className="flex flex-col gap-1">
-              <p className="text-gray-600 text-sm sm:text-base lg:text-lg">用自然语言描述您的任务，AI 将自动为您安排日程</p>
-              <RealtimeClock className="text-sm text-gray-500" />
-            </div>
-          </div>
-          
-          {/* 右侧用户信息 */}
-          <div className="flex items-center gap-2 sm:gap-4 bg-white rounded-lg shadow-md px-3 sm:px-4 py-2 sm:py-3 self-start lg:self-auto">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <User className="text-blue-600" size={16} />
+        {/* 顶部导航栏 */}
+        <div className="bg-white rounded-xl shadow-lg mb-6">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 p-4 sm:p-6">
+            {/* 左侧品牌标识 */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
+                <Calendar className="text-white" size={24} />
               </div>
-              <div className="text-sm">
-                <p className="font-medium text-gray-800">
-                  {(user as any)?.user_metadata?.username || user?.email?.split('@')[0] || '用户'}
-                </p>
-                <p className="text-gray-500 text-xs">{user?.email}</p>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-800">SmartTime</h1>
+                <p className="text-gray-500 text-sm hidden sm:block">智能日程管理助手</p>
               </div>
             </div>
-            <button
-              onClick={() => navigate('/profile')}
-              className="flex items-center gap-1 px-3 py-1.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-              title="个人主页"
-            >
-              <User size={16} />
-              <span className="text-sm">主页</span>
-            </button>
-            <button
-              onClick={() => setShowUserGuide(true)}
-              className="flex items-center gap-1 px-3 py-1.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-              title="查看使用指南"
-            >
-              <HelpCircle size={16} />
-              <span className="text-sm">帮助</span>
-            </button>
-            <button
-              onClick={async () => {
-                try {
-                  await signOut();
-                  showSuccess('登出成功', '已成功登出');
-                  navigate('/login');
-                } catch (error) {
-                  showError('登出失败', '登出失败，请重试');
-                }
-              }}
-              className="flex items-center gap-1 px-3 py-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-              title="登出"
-            >
-              <LogOut size={16} />
-              <span className="text-sm">登出</span>
-            </button>
+            
+            {/* 右侧状态栏 */}
+            <div className="flex items-center gap-4">
+              {/* 实时时间显示 */}
+              <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <RealtimeClock className="text-sm font-medium text-gray-700" />
+              </div>
+              
+              {/* 用户信息 */}
+              <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg">
+                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                  <User className="text-blue-600" size={16} />
+                </div>
+                <div className="text-sm hidden sm:block">
+                  <p className="font-medium text-gray-800">
+                    {(user as any)?.user_metadata?.username || user?.email?.split('@')[0] || '用户'}
+                  </p>
+                  <p className="text-gray-500 text-xs">{user?.email}</p>
+                </div>
+              </div>
+              
+              {/* 操作按钮组 */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => navigate('/profile')}
+                  className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-all duration-200 border border-blue-200 hover:border-blue-300 font-medium shadow-sm hover:shadow-md"
+                >
+                  <User size={16} />
+                  个人中心
+                </button>
+                
+                <button
+                  onClick={() => setShowUserGuide(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-white text-green-600 rounded-lg hover:bg-green-50 transition-all duration-200 border border-green-200 hover:border-green-300 font-medium shadow-sm hover:shadow-md"
+                >
+                  <HelpCircle size={16} />
+                  使用指南
+                </button>
+                
+                <button
+                  onClick={async () => {
+                    try {
+                      await signOut();
+                      showSuccess('登出成功', '已成功登出');
+                      navigate('/login');
+                    } catch (error) {
+                      showError('登出失败', '登出失败，请重试');
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-white text-red-600 rounded-lg hover:bg-red-50 transition-all duration-200 border border-red-200 hover:border-red-300 font-medium shadow-sm hover:shadow-md"
+                >
+                  <LogOut size={16} />
+                  退出登录
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* 任务输入区域 */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="flex flex-col space-y-4">
-              <label htmlFor="taskInput" className="text-lg font-semibold text-gray-700">
-                描述您的任务
-              </label>
+        {/* 欢迎信息 */}
+        <div className="text-center mb-8">
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
+            欢迎回来，{(user as any)?.user_metadata?.username || user?.email?.split('@')[0] || '用户'}！
+          </h2>
+          <p className="text-gray-600 text-lg">用自然语言描述您的任务，AI 将自动为您安排日程</p>
+        </div>
+
+        {/* 主要操作区域 */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <div className="text-center mb-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-2">创建新任务</h3>
+            <p className="text-gray-600">使用自然语言描述，让AI为您智能安排</p>
+          </div>
+          
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-3">
               <div className="relative">
                 <textarea
                   id="taskInput"
@@ -612,16 +633,16 @@ export default function Home() {
                     }
                   }}
                   placeholder="例如：明天上午9点开会，下午写项目报告，周五下午3点和客户见面..."
-                  className={`w-full p-4 border rounded-lg focus:ring-2 focus:border-transparent resize-none ${
+                  className={`w-full p-4 border-2 rounded-xl focus:ring-2 focus:border-transparent resize-none transition-all ${
                     inputText.length >= 90 ? 'border-orange-300 focus:ring-orange-500' : 
                     inputText.length === 100 ? 'border-red-300 focus:ring-red-500' : 
-                    'border-gray-300 focus:ring-blue-500'
+                    'border-gray-200 focus:ring-blue-500 focus:border-blue-500'
                   }`}
                   rows={4}
                   disabled={isLoading}
                   maxLength={100}
                 />
-                <div className={`absolute bottom-2 right-2 text-xs ${
+                <div className={`absolute bottom-3 right-3 text-xs font-medium ${
                   inputText.length >= 90 ? 'text-orange-600' : 
                   inputText.length === 100 ? 'text-red-600' : 
                   'text-gray-400'
@@ -630,113 +651,162 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+            
+            {/* 主要操作按钮 */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="submit"
+                disabled={isLoading || !inputText.trim()}
+                className="flex-1 px-6 py-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center gap-3 shadow-lg font-semibold transform hover:-translate-y-1 active:scale-95"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="animate-spin" size={20} />
+                    <span>AI 解析中...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send size={20} />
+                    <span>AI 智能解析</span>
+                  </>
+                )}
+              </button>
+              
               <button
                 type="button"
                 onClick={() => navigate('/schedule')}
-                className="px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg text-sm sm:text-base"
+                className="flex-1 px-6 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 transition-all duration-300 flex items-center justify-center gap-3 shadow-lg font-semibold transform hover:-translate-y-1 active:scale-95"
               >
-                <Zap size={18} />
-                智能日程安排
+                <Zap size={20} />
+                <span>智能日程安排</span>
               </button>
-              <div className="flex flex-wrap gap-2 sm:gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedTask(null);
-                    setModalMode('create');
-                    setShowModal(true);
-                  }}
-                  className="px-3 sm:px-6 py-2 sm:py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base flex-1 sm:flex-none"
-                >
-                  <Plus size={16} />
-                  <span className="hidden sm:inline">手动添加</span>
-                  <span className="sm:hidden">添加</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedTask(null);
-                    setModalMode('delete');
-                    setShowModal(true);
-                  }}
-                  className="px-3 sm:px-6 py-2 sm:py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base flex-1 sm:flex-none"
-                >
-                  <Trash2 size={16} />
-                  <span className="hidden sm:inline">AI 删除</span>
-                  <span className="sm:hidden">删除</span>
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading || !inputText.trim()}
-                  className="px-3 sm:px-6 py-2 sm:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base flex-1 sm:flex-none"
-                >
-                  {isLoading ? (
-                    <Loader2 className="animate-spin" size={16} />
-                  ) : (
-                    <Send size={16} />
-                  )}
-                  <span className="hidden sm:inline">{isLoading ? '解析中...' : 'AI 解析任务'}</span>
-                  <span className="sm:hidden">{isLoading ? '解析中' : 'AI解析'}</span>
-                </button>
-              </div>
+            </div>
+            
+            {/* 辅助操作按钮 */}
+            <div className="flex flex-wrap gap-3 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTask(null);
+                  setModalMode('create');
+                  setShowModal(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white text-gray-600 rounded-lg hover:bg-gray-50 transition-all duration-200 border-2 border-gray-200 hover:border-gray-300 font-medium"
+              >
+                <Plus size={16} />
+                <span>手动添加</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTask(null);
+                  setModalMode('delete');
+                  setShowModal(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white text-red-500 rounded-lg hover:bg-red-50 transition-all duration-200 border-2 border-red-200 hover:border-red-300 font-medium"
+              >
+                <Trash2 size={16} />
+                <span>AI 删除</span>
+              </button>
             </div>
           </form>
         </div>
 
-        {/* 时间统计信息 */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-          {(() => {
-            const now = new Date();
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-            const startOfWeek = new Date(today);
-            startOfWeek.setDate(today.getDate() - today.getDay());
-            const endOfWeek = new Date(startOfWeek.getTime() + 6 * 24 * 60 * 60 * 1000);
-            
-            const todayTasks = getDisplayTasks().filter(task => {
-              const taskDate = new Date(task.start);
-              return taskDate >= today && taskDate < tomorrow;
-            });
-            
-            const tomorrowTasks = getDisplayTasks().filter(task => {
-              const taskDate = new Date(task.start);
-              const dayAfterTomorrow = new Date(tomorrow.getTime() + 24 * 60 * 60 * 1000);
-              return taskDate >= tomorrow && taskDate < dayAfterTomorrow;
-            });
-            
-            const thisWeekTasks = getDisplayTasks().filter(task => {
-              const taskDate = new Date(task.start);
-              return taskDate >= startOfWeek && taskDate <= endOfWeek;
-            });
-            
-            const completedTasks = getDisplayTasks().filter(task => task.completed);
-            
-            return (
-              <>
-                <div className="bg-white rounded-lg shadow-md p-4 text-center">
-                  <div className="text-2xl font-bold text-blue-600">{todayTasks.length}</div>
-                  <div className="text-sm text-gray-600">今日任务</div>
-                </div>
-                <div className="bg-white rounded-lg shadow-md p-4 text-center">
-                  <div className="text-2xl font-bold text-green-600">{tomorrowTasks.length}</div>
-                  <div className="text-sm text-gray-600">明日任务</div>
-                </div>
-                <div className="bg-white rounded-lg shadow-md p-4 text-center">
-                  <div className="text-2xl font-bold text-purple-600">{thisWeekTasks.length}</div>
-                  <div className="text-sm text-gray-600">本周任务</div>
-                </div>
-                <div className="bg-white rounded-lg shadow-md p-4 text-center">
-                  <div className="text-2xl font-bold text-orange-600">{completedTasks.length}</div>
-                  <div className="text-sm text-gray-600">已完成</div>
-                </div>
-              </>
-            );
-          })()}
+        {/* 任务统计概览 */}
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <BarChart3 size={20} className="text-blue-600" />
+            任务统计概览
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {(() => {
+              const now = new Date();
+              const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+              const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+              const startOfWeek = new Date(today);
+              startOfWeek.setDate(today.getDate() - today.getDay());
+              const endOfWeek = new Date(startOfWeek.getTime() + 6 * 24 * 60 * 60 * 1000);
+              
+              const todayTasks = getDisplayTasks().filter(task => {
+                const taskDate = new Date(task.start);
+                return taskDate >= today && taskDate < tomorrow;
+              });
+              
+              const tomorrowTasks = getDisplayTasks().filter(task => {
+                const taskDate = new Date(task.start);
+                const dayAfterTomorrow = new Date(tomorrow.getTime() + 24 * 60 * 60 * 1000);
+                return taskDate >= tomorrow && taskDate < dayAfterTomorrow;
+              });
+              
+              const thisWeekTasks = getDisplayTasks().filter(task => {
+                const taskDate = new Date(task.start);
+                return taskDate >= startOfWeek && taskDate <= endOfWeek;
+              });
+              
+              const completedTasks = getDisplayTasks().filter(task => task.completed);
+              
+              return (
+                <>
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-blue-700">今日任务</p>
+                        <p className="text-2xl font-bold text-blue-600">{todayTasks.length}</p>
+                      </div>
+                      <div className="bg-blue-600 rounded-lg p-2">
+                        <Calendar className="text-white" size={20} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-green-700">明日任务</p>
+                        <p className="text-2xl font-bold text-green-600">{tomorrowTasks.length}</p>
+                      </div>
+                      <div className="bg-green-600 rounded-lg p-2">
+                        <Clock className="text-white" size={20} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-purple-700">本周任务</p>
+                        <p className="text-2xl font-bold text-purple-600">{thisWeekTasks.length}</p>
+                      </div>
+                      <div className="bg-purple-600 rounded-lg p-2">
+                        <CalendarDays className="text-white" size={20} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 border border-orange-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-orange-700">已完成</p>
+                        <p className="text-2xl font-bold text-orange-600">{completedTasks.length}</p>
+                      </div>
+                      <div className="bg-orange-600 rounded-lg p-2">
+                        <CheckCircle className="text-white" size={20} />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
         </div>
 
         {/* 日历展示区域 */}
-          <div className="bg-white rounded-xl shadow-lg p-3 sm:p-6">
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Calendar size={20} />
+              任务日历
+            </h3>
+            <p className="text-blue-100 text-sm mt-1">点击日期创建任务，点击任务进行编辑</p>
+          </div>
+          <div className="p-3 sm:p-6">
             <style>{`
               .fc-deleteButton-button {
                 background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
@@ -946,6 +1016,7 @@ export default function Home() {
               hour12: false
             }}
           />
+          </div>
         </div>
         
         {/* 隐藏的功能按钮，用于移动端菜单调用 */}
