@@ -5,6 +5,29 @@ import { taskStore, Task, TaskCreate, TaskUpdate, RecurrenceRule } from '../stor
 // import ReminderSettings from './ReminderSettings'; // 已禁用提醒功能
 import { useNotification } from './NotificationManager';
 
+interface WorkInfo {
+  title: string;
+  description: string;
+  duration_hours: number;
+  deadline: string | null;
+  priority: string;
+  preferences: string[];
+}
+
+interface TimeSlot {
+  start: string;
+  end: string;
+  score: number;
+  reason: string;
+}
+
+interface AnalyzeResponse {
+  success: boolean;
+  work_info: WorkInfo | null;
+  recommendations: TimeSlot[];
+  error: string | null;
+}
+
 interface UnifiedTaskModalProps {
   mode: 'create' | 'edit' | 'delete';
   task?: Partial<Task> | null;
@@ -33,7 +56,9 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
   const [deleteText, setDeleteText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const { createTask, updateTask, deleteTask } = taskStore();
+  
+
+  const { createTask, updateTask, deleteTask, analyzeSchedule } = taskStore();
   const { showSuccess, showError, showInfo } = useNotification();
   
   const isEditing = mode === 'edit' && task && 'id' in task && task.id;
@@ -77,8 +102,12 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
+
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    console.log('[TASK MODAL DEBUG] handleSubmit called, mode:', mode);
     
     if (isDeleting) {
       await handleDeleteSubmit();
@@ -108,6 +137,8 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
         is_important: formData.is_important
       };
       
+      console.log('[TASK MODAL DEBUG] 准备提交的任务数据:', taskData);
+      
       // 如果是重复任务，添加重复规则
       if (formData.is_recurring) {
         taskData.recurrence_rule = {
@@ -120,15 +151,19 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
       }
 
       if (isEditing) {
+        console.log('[TASK MODAL DEBUG] 更新任务，ID:', task.id);
         await updateTask(task.id!, taskData as TaskUpdate);
         showSuccess('任务更新成功！');
       } else {
-        await createTask(taskData as TaskCreate);
+        console.log('[TASK MODAL DEBUG] 创建新任务');
+        const result = await createTask(taskData as TaskCreate);
+        console.log('[TASK MODAL DEBUG] 任务创建结果:', result);
         showSuccess('任务创建成功！');
       }
       
       onSave();
     } catch (error) {
+      console.error('[TASK MODAL DEBUG] 任务提交失败:', error);
       showError(isEditing ? '更新任务失败' : '创建任务失败');
     } finally {
       setIsLoading(false);
@@ -302,32 +337,34 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                 </label>
                 <div className="relative">
                   <input
-                    type="text"
-                    id="title"
-                    value={formData.title}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (value.length <= 100) {
-                        setFormData({ ...formData, title: value });
-                      }
-                    }}
-                    placeholder="输入任务标题"
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${
-                      formData.title.length >= 90 ? 'border-orange-300 focus:ring-orange-500' : 
-                      formData.title.length === 100 ? 'border-red-300 focus:ring-red-500' : 
-                      'border-gray-300 focus:ring-blue-500'
-                    }`}
-                    disabled={isLoading}
-                    maxLength={100}
-                    required
-                  />
-                  <div className={`absolute -bottom-5 right-0 text-xs ${
-                    formData.title.length >= 90 ? 'text-orange-600' : 
-                    formData.title.length === 100 ? 'text-red-600' : 
-                    'text-gray-400'
-                  }`}>
-                    {formData.title.length}/100
-                  </div>
+                  type="text"
+                  id="title"
+                  value={formData.title}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value.length <= 100) {
+                      setFormData({ ...formData, title: value });
+                    }
+                  }}
+                  placeholder="输入任务标题"
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:border-transparent ${
+                    formData.title.length >= 90 ? 'border-orange-300 focus:ring-orange-500' : 
+                    formData.title.length === 100 ? 'border-red-300 focus:ring-red-500' : 
+                    'border-gray-300 focus:ring-blue-500'
+                  }`}
+                  disabled={isLoading}
+                  maxLength={100}
+                  required
+                />
+                <div className={`absolute -bottom-5 right-0 text-xs ${
+                  formData.title.length >= 90 ? 'text-orange-600' : 
+                  formData.title.length === 100 ? 'text-red-600' : 
+                  'text-gray-400'
+                }`}>
+                  {formData.title.length}/100
+                </div>
+                
+
                 </div>
               </div>
 
@@ -562,6 +599,8 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
               )}
             </>
           )}
+
+
 
           {/* 按钮组 */}
           <div className="flex justify-between pt-4">

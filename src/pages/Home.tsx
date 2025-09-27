@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, Plus, Send, Loader2, Zap, Trash2, LogOut, User, HelpCircle, BarChart3, Clock, CalendarDays, CheckCircle } from 'lucide-react';
+import { Calendar, Plus, Send, Loader2, Zap, Trash2, LogOut, User, HelpCircle, BarChart3, Clock, CalendarDays, CheckCircle, Brain } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -28,6 +28,12 @@ export default function Home() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
   const [createdTasks, setCreatedTasks] = useState<Task[]>([]);
+  
+  // 智能日程安排相关状态
+  const [scheduleInput, setScheduleInput] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [scheduleResults, setScheduleResults] = useState<any>(null);
+  const [showScheduleResults, setShowScheduleResults] = useState(false);
   const [originalInputText, setOriginalInputText] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteType, setDeleteType] = useState<'day' | 'week' | 'month'>('day');
@@ -54,7 +60,7 @@ export default function Home() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   
-  const { tasks, fetchTasks, parseAndCreateTasks, deleteTask, batchDeleteTasks } = taskStore();
+  const { tasks, fetchTasks, parseAndCreateTasks, deleteTask, batchDeleteTasks, analyzeSchedule } = taskStore();
 
   useEffect(() => {
     fetchTasks();
@@ -353,6 +359,58 @@ export default function Home() {
     }
   };
 
+  // 智能日程安排处理函数
+  const handleScheduleAnalyze = async () => {
+    if (!scheduleInput.trim()) {
+      showError('请输入工作描述');
+      return;
+    }
+
+    setIsAnalyzing(true);
+    
+    try {
+      const result = await analyzeSchedule(scheduleInput);
+      
+      if (result.work_info && result.recommendations) {
+        setScheduleResults(result);
+        setShowScheduleResults(true);
+        showSuccess('智能分析完成！请选择合适的时间段');
+      } else {
+        showError('分析失败，请重试');
+      }
+    } catch (error: any) {
+      console.error('智能日程分析错误:', error);
+      showError('分析失败，请重试');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // 应用智能日程安排结果
+  const handleApplyScheduleResult = (selectedSlot: any) => {
+    if (selectedSlot && scheduleResults?.work_info) {
+      // 创建任务
+      const taskData = {
+        title: scheduleResults.work_info.title,
+        start: selectedSlot.start,
+        end: selectedSlot.end,
+        priority: scheduleResults.work_info.priority,
+      };
+      
+      // 打开任务创建模态框并预填数据
+      setSelectedTask(taskData);
+      setModalMode('create');
+      setShowModal(true);
+      
+      // 清理智能日程安排状态
+      setScheduleResults(null);
+      setShowScheduleResults(false);
+      setScheduleInput('');
+      
+      showSuccess('智能日程安排已应用，请确认并保存任务');
+    }
+  };
+
   const getDeleteTypeText = (type: 'day' | 'week' | 'month') => {
     switch (type) {
       case 'day': return '今日';
@@ -613,6 +671,135 @@ export default function Home() {
           <p className="text-gray-600 text-lg">用自然语言描述您的任务，AI 将自动为您安排日程</p>
         </div>
 
+        {/* 智能日程安排功能区域 */}
+        <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl shadow-lg p-6 border border-purple-200 mb-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <Brain className="w-6 h-6 text-purple-600" />
+            智能日程安排
+          </h2>
+          
+          <div className="space-y-4">
+            <div className="relative">
+              <textarea
+                value={scheduleInput}
+                onChange={(e) => setScheduleInput(e.target.value)}
+                placeholder="描述您的工作内容，AI将为您智能安排时间...\n例如：明天需要完成项目报告，大概需要3小时"
+                className="w-full px-4 py-3 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                rows={3}
+                disabled={isAnalyzing}
+              />
+              <div className="absolute bottom-2 right-2 text-xs text-gray-400">
+                {scheduleInput.length}/500
+              </div>
+            </div>
+            
+            <button
+              type="button"
+              onClick={handleScheduleAnalyze}
+              disabled={isAnalyzing || !scheduleInput.trim()}
+              className="w-full bg-gradient-to-r from-purple-500 to-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:from-purple-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+            >
+              {isAnalyzing ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>AI智能分析中...</span>
+                </>
+              ) : (
+                <>
+                  <Brain className="w-5 h-5" />
+                  <span>开始智能分析</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* 智能日程安排结果显示 */}
+        {showScheduleResults && scheduleResults && (
+          <div className="bg-white rounded-xl shadow-lg p-6 border border-purple-200 mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Brain className="w-5 h-5 text-purple-600" />
+              <h3 className="text-lg font-semibold text-gray-800">智能分析结果</h3>
+            </div>
+            
+            {/* 工作信息 */}
+            <div className="mb-4 p-3 bg-purple-50 rounded-lg border border-purple-100">
+              <h4 className="font-medium text-gray-700 mb-2">工作信息</h4>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-gray-500">标题:</span>
+                  <span className="ml-2 font-medium">{scheduleResults.work_info?.title}</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">预估时长:</span>
+                  <span className="ml-2 font-medium">{scheduleResults.work_info?.duration_hours} 小时</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">优先级:</span>
+                  <span className={`ml-2 px-2 py-1 rounded text-xs font-medium ${
+                    scheduleResults.work_info?.priority === 'high' ? 'bg-red-100 text-red-700' :
+                    scheduleResults.work_info?.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-green-100 text-green-700'
+                  }`}>
+                    {scheduleResults.work_info?.priority === 'high' ? '高' : scheduleResults.work_info?.priority === 'medium' ? '中' : '低'}
+                  </span>
+                </div>
+                {scheduleResults.work_info?.deadline && (
+                  <div>
+                    <span className="text-gray-500">截止时间:</span>
+                    <span className="ml-2 font-medium">{new Date(scheduleResults.work_info.deadline).toLocaleString('zh-CN')}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* 推荐时间段 */}
+            {scheduleResults.recommendations && scheduleResults.recommendations.length > 0 && (
+              <div className="mb-4">
+                <h4 className="font-medium text-gray-700 mb-3">推荐时间段</h4>
+                <div className="grid grid-cols-1 gap-2 max-h-60 overflow-y-auto">
+                  {scheduleResults.recommendations.map((slot: any, index: number) => (
+                    <div
+                      key={index}
+                      onClick={() => handleApplyScheduleResult(slot)}
+                      className="p-3 rounded-lg border-2 cursor-pointer transition-all border-gray-200 hover:border-purple-300 bg-white hover:bg-purple-50"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-sm">时间段 {index + 1}</span>
+                        <span className="text-xs text-purple-600 font-medium">{slot.score}分</span>
+                      </div>
+                      <div className="text-sm text-gray-600 mb-1">
+                        {new Date(slot.start).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })} - 
+                        {new Date(slot.end).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                      <div className="text-xs text-gray-500">{slot.reason}</div>
+                      <div className="mt-2 flex items-center gap-1 text-purple-600">
+                        <CheckCircle className="w-3 h-3" />
+                        <span className="text-xs font-medium">点击应用此时间段</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* 操作按钮 */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowScheduleResults(false);
+                  setScheduleResults(null);
+                  setScheduleInput('');
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                关闭结果
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 主要操作区域 */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <div className="text-center mb-6">
@@ -674,11 +861,15 @@ export default function Home() {
               
               <button
                 type="button"
-                onClick={() => navigate('/schedule')}
-                className="flex-1 px-6 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl hover:from-indigo-600 hover:to-purple-700 transition-all duration-300 flex items-center justify-center gap-3 shadow-lg font-semibold transform hover:-translate-y-1 active:scale-95"
+                onClick={() => {
+                  setSelectedTask(null);
+                  setModalMode('create');
+                  setShowModal(true);
+                }}
+                className="flex-1 px-6 py-4 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all duration-300 flex items-center justify-center gap-3 shadow-lg font-semibold transform hover:-translate-y-1 active:scale-95"
               >
-                <Zap size={20} />
-                <span>智能日程安排</span>
+                <Plus size={20} />
+                <span>手动添加任务</span>
               </button>
             </div>
             

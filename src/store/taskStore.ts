@@ -45,6 +45,7 @@ export interface Task {
   reminder_type?: string;
   is_important?: boolean;
   reminder_sent?: boolean;
+  completed?: boolean;
 }
 
 export interface TaskCreate {
@@ -202,8 +203,8 @@ export const taskStore = create<TaskStore>((set, get) => ({
   batchDeleteTasks: async (type: 'day' | 'week' | 'month', date: Date) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.delete('/api/tasks/batch', { 
-        data: { type, date: date.toISOString() } 
+      const response = await api.post(`/api/tasks/delete/${type}`, { 
+        date: date.toISOString() 
       });
       
       // 重新获取任务列表
@@ -227,7 +228,9 @@ export const taskStore = create<TaskStore>((set, get) => ({
       const response = await api.post('/api/schedule/parse', { text });
       
       set({ isLoading: false });
-      return response.data;
+      // 确保返回的是任务数组
+      const tasks = response.data?.tasks || [];
+      return Array.isArray(tasks) ? tasks : [];
     } catch (error: any) {
       set({ 
         error: error.response?.data?.detail || '解析任务失败', 
@@ -238,16 +241,27 @@ export const taskStore = create<TaskStore>((set, get) => ({
   },
 
   // 分析智能日程安排
-  analyzeSchedule: async (text: string) => {
+  analyzeSchedule: async (description: string) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/api/schedule/analyze', { text });
+      console.log('[FRONTEND DEBUG] 开始智能日程分析，描述:', description);
+      const response = await api.post('/api/schedule/analyze', { description });
       
+      console.log('[FRONTEND DEBUG] 智能日程分析响应:', response.data);
       set({ isLoading: false });
       return response.data;
     } catch (error: any) {
+      console.error('[FRONTEND DEBUG] 智能日程分析错误:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        headers: error.response?.headers
+      });
+      
+      const errorMessage = error.response?.data?.detail || error.response?.data?.error || '分析日程失败';
       set({ 
-        error: error.response?.data?.detail || '分析日程失败', 
+        error: errorMessage, 
         isLoading: false 
       });
       throw error;
@@ -255,16 +269,16 @@ export const taskStore = create<TaskStore>((set, get) => ({
   },
 
   // 确认并创建日程
-  confirmSchedule: async (tasks: any[]) => {
+  confirmSchedule: async (work_info: WorkInfo, selected_slot: TimeSlot) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post('/api/schedule/confirm', { tasks });
+      const response = await api.post('/api/schedule/confirm', { work_info, selected_slot });
       
       // 重新获取任务列表
       await get().fetchTasks();
       
       set({ isLoading: false });
-      return response.data;
+      return response.data.task;
     } catch (error: any) {
       set({ 
         error: error.response?.data?.detail || '确认日程失败', 

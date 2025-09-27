@@ -6,7 +6,6 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { NotificationProvider } from "@/components/NotificationManager";
 import Landing from "@/pages/Landing";
 import Home from "@/pages/Home";
-import Schedule from "@/pages/Schedule";
 import Profile from "@/pages/Profile";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
@@ -26,11 +25,7 @@ export default function App() {
               <Home />
             </ProtectedRoute>
           } />
-          <Route path="/schedule" element={
-            <ProtectedRoute>
-              <Schedule />
-            </ProtectedRoute>
-          } />
+
           <Route path="/profile" element={
             <ProtectedRoute>
               <Profile />

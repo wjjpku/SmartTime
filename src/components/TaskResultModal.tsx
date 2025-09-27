@@ -17,6 +17,9 @@ const TaskResultModal: React.FC<TaskResultModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  // 确保createdTasks是数组类型
+  const safeTasks = Array.isArray(createdTasks) ? createdTasks : [];
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'high':
@@ -84,10 +87,10 @@ const TaskResultModal: React.FC<TaskResultModalProps> = ({
           {/* 创建的任务列表 */}
           <div className="mb-6">
             <h3 className="text-lg font-semibold text-gray-700 mb-4">
-              已为您创建 {createdTasks.length} 个任务：
+              已为您创建 {safeTasks.length} 个任务：
             </h3>
             <div className="space-y-4">
-              {createdTasks.map((task, index) => (
+              {safeTasks.map((task, index) => (
                 <div
                   key={task.id}
                   className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow"

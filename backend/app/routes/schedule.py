@@ -32,15 +32,17 @@ task_service = TaskService()
 deepseek_service = DeepSeekService(get_settings())
 
 @router.post("/schedule/analyze", response_model=ScheduleAnalyzeResponse)
-async def analyze_schedule(request: ScheduleAnalyzeRequest):
+async def analyze_schedule(request: ScheduleAnalyzeRequest, user_id: str = Depends(get_current_user_id)):
     """
     智能日程分析接口
     
     分析工作描述，考虑现有日程，推荐最佳的时间安排
     """
     try:
+        print(f"[BACKEND DEBUG] 智能日程分析请求 - 用户ID: {user_id}, 描述: {request.description}")
+        
         # 获取现有任务列表
-        existing_tasks = await task_service.get_all_tasks()
+        existing_tasks = await task_service.get_all_tasks(user_id)
         
         # 转换为字典格式，便于 DeepSeek 服务处理
         existing_tasks_dict = []
@@ -54,8 +56,12 @@ async def analyze_schedule(request: ScheduleAnalyzeRequest):
             }
             existing_tasks_dict.append(task_dict)
         
+        print(f"[BACKEND DEBUG] 获取到 {len(existing_tasks_dict)} 个现有任务")
+        
         # 调用 DeepSeek 服务进行智能分析
         work_info, time_slots = await deepseek_service.analyze_schedule(request.description, existing_tasks_dict)
+        
+        print(f"[BACKEND DEBUG] 分析完成 - 工作信息: {work_info}, 推荐时间段数量: {len(time_slots)}")
         
         return ScheduleAnalyzeResponse(
             success=True,
@@ -64,6 +70,10 @@ async def analyze_schedule(request: ScheduleAnalyzeRequest):
         )
     
     except Exception as e:
+        print(f"[BACKEND DEBUG] 智能日程分析错误: {str(e)}")
+        import traceback
+        print(f"[BACKEND DEBUG] 错误堆栈: {traceback.format_exc()}")
+        
         return ScheduleAnalyzeResponse(
             success=False,
             work_info=None,
