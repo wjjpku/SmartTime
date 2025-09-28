@@ -308,11 +308,9 @@ npm run test:ui
 
 ## 📞 联系我们
 
-如果你有任何问题或建议，请通过以下方式联系我们：
+如果你有任何问题或建议，请通过以下方式联系我：
 
-- 📧 Email: your-email@example.com
-- 🐛 Issues: [GitHub Issues](https://github.com/your-username/smarttime/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/your-username/smarttime/discussions)
+- 📧 Email: wjj_math@stu.pku.edu.cn
 
 ---
 
