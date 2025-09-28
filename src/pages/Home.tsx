@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, Plus, Send, Loader2, Zap, Trash2, LogOut, User, HelpCircle, BarChart3, Clock, CalendarDays, CheckCircle, Brain } from 'lucide-react';
+import { Calendar, Plus, Send, Loader2, Zap, Trash2, LogOut, User, HelpCircle, BarChart3, Clock, CalendarDays, CheckCircle, Brain, Edit3, Save, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -10,6 +10,7 @@ import UnifiedTaskModal from '../components/UnifiedTaskModal';
 import TaskResultModal from '../components/TaskResultModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../components/NotificationManager';
+import { supabase } from '../lib/supabase';
 // import TaskReminder from '../components/TaskReminder'; // 已禁用提醒功能
 import TaskFilter from '../components/TaskFilter';
 import DataExport from '../components/DataExport';
@@ -18,8 +19,12 @@ import RealtimeClock, { getRelativeTimeLabel, isToday, isThisWeek } from '../com
 
 export default function Home() {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user, signOut, refreshUser } = useAuth();
   const { showSuccess, showError, showInfo } = useNotification();
+  const [userDisplayData, setUserDisplayData] = useState({
+    username: '',
+    avatar_url: ''
+  });
   const calendarRef = useRef<FullCalendar>(null);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -48,6 +53,11 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState(new Date()); // 用户选中的日期
   const [calendarViewRange, setCalendarViewRange] = useState({ start: new Date(), end: new Date() }); // 日历实际显示的日期范围
   const [showUserGuide, setShowUserGuide] = useState(false);
+  
+  // 昵称编辑相关状态
+  const [isEditingUsername, setIsEditingUsername] = useState(false);
+  const [editedUsername, setEditedUsername] = useState('');
+  const [isSavingUsername, setIsSavingUsername] = useState(false);
 
 
   // 监听窗口大小变化
@@ -73,6 +83,142 @@ export default function Home() {
       }, 1000); // 延迟1秒显示，让用户先看到界面
     }
   }, [fetchTasks]);
+
+  // 监听用户数据变化，确保实时更新显示
+  useEffect(() => {
+    if (user) {
+      const username = (user as any)?.user_metadata?.username;
+      const email = user.email || '';
+      
+      // 如果有昵称就使用昵称，否则使用邮箱前缀，最后才使用默认值
+      let displayName = '';
+      if (username && username.trim()) {
+        displayName = username;
+      } else if (email) {
+        // 使用邮箱@前面的部分作为显示名
+        displayName = email.split('@')[0];
+      } else {
+        displayName = '朋友';
+      }
+      
+      // 只有在不是编辑状态时才更新显示数据，避免覆盖正在编辑的内容
+      if (!isEditingUsername) {
+        setUserDisplayData({
+          username: displayName,
+          avatar_url: (user as any)?.user_metadata?.avatar_url || ''
+        });
+      }
+    }
+  }, [user, isEditingUsername]);
+
+  // 监听来自Profile页面的用户数据更新事件
+  useEffect(() => {
+    const handleUserDataUpdate = (event: CustomEvent) => {
+      console.log('接收到用户数据更新事件:', event.detail);
+      
+      const username = event.detail.username;
+      const email = user?.email || '';
+      
+      // 如果有昵称就使用昵称，否则使用邮箱前缀，最后才使用默认值
+      let displayName = '';
+      if (username && username.trim()) {
+        displayName = username;
+      } else if (email) {
+        // 使用邮箱@前面的部分作为显示名
+        displayName = email.split('@')[0];
+      } else {
+        displayName = '朋友';
+      }
+      
+      setUserDisplayData({
+        username: displayName,
+        avatar_url: event.detail.avatar_url || ''
+      });
+      // 同时刷新AuthContext中的用户数据
+      refreshUser();
+    };
+
+    window.addEventListener('userDataUpdated', handleUserDataUpdate as EventListener);
+    return () => {
+      window.removeEventListener('userDataUpdated', handleUserDataUpdate as EventListener);
+    };
+  }, [refreshUser, user?.email]);
+
+  // 昵称编辑处理函数
+  const handleStartEditUsername = () => {
+    setIsEditingUsername(true);
+    setEditedUsername(userDisplayData.username || '');
+  };
+
+  const handleCancelEditUsername = () => {
+    setIsEditingUsername(false);
+    setEditedUsername('');
+  };
+
+  const handleSaveUsername = async () => {
+    if (!user) {
+      showError('错误', '用户未登录');
+      return;
+    }
+
+    const newUsername = editedUsername.trim();
+    if (!newUsername) {
+      showError('错误', '昵称不能为空');
+      return;
+    }
+
+    setIsSavingUsername(true);
+    try {
+      // 更新用户元数据
+      const { data, error } = await supabase.auth.updateUser({
+        data: {
+          username: newUsername
+        }
+      });
+
+      if (error) {
+        console.error('昵称更新失败:', error);
+        throw new Error(`昵称更新失败: ${error.message}`);
+      }
+
+      console.log('昵称更新成功:', data);
+
+      // 立即更新本地状态
+      setUserDisplayData(prev => ({
+        ...prev,
+        username: newUsername
+      }));
+
+      // 结束编辑状态
+      setIsEditingUsername(false);
+      setEditedUsername('');
+
+      // 刷新用户数据（在编辑状态结束后）
+      try {
+        await refreshUser();
+        console.log('用户数据刷新成功');
+      } catch (refreshError: any) {
+        console.error('用户数据刷新失败:', refreshError);
+      }
+
+      showSuccess('保存成功', '昵称已成功更新');
+
+      // 触发全局用户数据更新事件
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userDataUpdated', {
+          detail: {
+            username: newUsername,
+            avatar_url: userDisplayData.avatar_url
+          }
+        }));
+      }, 100);
+    } catch (error: any) {
+      console.error('保存昵称失败:', error);
+      showError('保存失败', error.message || '昵称保存时发生未知错误');
+    } finally {
+      setIsSavingUsername(false);
+    }
+  };
 
   // 监听日期变化，在跨天时自动刷新数据
   useEffect(() => {
@@ -614,12 +760,16 @@ export default function Home() {
               
               {/* 用户信息 */}
               <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <User className="text-blue-600" size={16} />
+                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center overflow-hidden">
+                  {userDisplayData.avatar_url ? (
+                    <img src={userDisplayData.avatar_url} alt="用户头像" className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="text-blue-600" size={16} />
+                  )}
                 </div>
                 <div className="text-sm hidden sm:block">
                   <p className="font-medium text-gray-800">
-                    {(user as any)?.user_metadata?.username || user?.email?.split('@')[0] || '用户'}
+                    {userDisplayData.username}
                   </p>
                   <p className="text-gray-500 text-xs">{user?.email}</p>
                 </div>
@@ -665,9 +815,54 @@ export default function Home() {
 
         {/* 欢迎信息 */}
         <div className="text-center mb-8">
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
-            欢迎回来，{(user as any)?.user_metadata?.username || user?.email?.split('@')[0] || '用户'}！
-          </h2>
+          <div className="flex items-center justify-center gap-3 mb-2">
+            {isEditingUsername ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={editedUsername}
+                  onChange={(e) => setEditedUsername(e.target.value)}
+                  className="text-2xl sm:text-3xl font-bold text-gray-800 bg-white border-2 border-blue-300 rounded-lg px-3 py-1 text-center focus:outline-none focus:border-blue-500"
+                  placeholder="输入昵称"
+                  maxLength={20}
+                  disabled={isSavingUsername}
+                />
+                <button
+                  onClick={handleSaveUsername}
+                  disabled={isSavingUsername || !editedUsername.trim()}
+                  className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+                  title="保存昵称"
+                >
+                  {isSavingUsername ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Save className="w-5 h-5" />
+                  )}
+                </button>
+                <button
+                  onClick={handleCancelEditUsername}
+                  disabled={isSavingUsername}
+                  className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50"
+                  title="取消编辑"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <h2 className="text-2xl sm:text-3xl font-bold text-gray-800">
+                  欢迎回来，{userDisplayData.username}！
+                </h2>
+                <button
+                  onClick={handleStartEditUsername}
+                  className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title="编辑昵称"
+                >
+                  <Edit3 className="w-5 h-5" />
+                </button>
+              </div>
+            )}
+          </div>
           <p className="text-gray-600 text-lg">用自然语言描述您的任务，AI 将自动为您安排日程</p>
         </div>
 
@@ -840,11 +1035,12 @@ export default function Home() {
             </div>
             
             {/* 主要操作按钮 */}
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex gap-3">
+              {/* AI智能解析按钮 - 占约1/2宽度 */}
               <button
                 type="submit"
                 disabled={isLoading || !inputText.trim()}
-                className="flex-1 px-6 py-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center gap-3 shadow-lg font-semibold transform hover:-translate-y-1 active:scale-95"
+                className="flex-[2] px-6 py-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center gap-3 shadow-lg font-semibold transform hover:-translate-y-1 active:scale-95"
               >
                 {isLoading ? (
                   <>
@@ -859,6 +1055,7 @@ export default function Home() {
                 )}
               </button>
               
+              {/* 手动添加按钮 - 略小 */}
               <button
                 type="button"
                 onClick={() => {
@@ -866,27 +1063,13 @@ export default function Home() {
                   setModalMode('create');
                   setShowModal(true);
                 }}
-                className="flex-1 px-6 py-4 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all duration-300 flex items-center justify-center gap-3 shadow-lg font-semibold transform hover:-translate-y-1 active:scale-95"
+                className="flex-1 px-4 py-4 bg-gradient-to-r from-green-500 to-teal-600 text-white rounded-xl hover:from-green-600 hover:to-teal-700 transition-all duration-300 flex items-center justify-center gap-2 shadow-lg font-medium transform hover:-translate-y-1 active:scale-95"
               >
-                <Plus size={20} />
-                <span>手动添加任务</span>
-              </button>
-            </div>
-            
-            {/* 辅助操作按钮 */}
-            <div className="flex flex-wrap gap-3 pt-2 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedTask(null);
-                  setModalMode('create');
-                  setShowModal(true);
-                }}
-                className="flex items-center gap-2 px-4 py-2.5 bg-white text-gray-600 rounded-lg hover:bg-gray-50 transition-all duration-200 border-2 border-gray-200 hover:border-gray-300 font-medium"
-              >
-                <Plus size={16} />
+                <Plus size={18} />
                 <span>手动添加</span>
               </button>
+              
+              {/* AI删除按钮 - 略小 */}
               <button
                 type="button"
                 onClick={() => {
@@ -894,9 +1077,9 @@ export default function Home() {
                   setModalMode('delete');
                   setShowModal(true);
                 }}
-                className="flex items-center gap-2 px-4 py-2.5 bg-white text-red-500 rounded-lg hover:bg-red-50 transition-all duration-200 border-2 border-red-200 hover:border-red-300 font-medium"
+                className="flex-1 px-4 py-4 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 transition-all duration-300 flex items-center justify-center gap-2 shadow-lg font-medium transform hover:-translate-y-1 active:scale-95"
               >
-                <Trash2 size={16} />
+                <Trash2 size={18} />
                 <span>AI 删除</span>
               </button>
             </div>

@@ -135,92 +135,7 @@
       ]
     },
     "18c26299-97ee-4765-8702-c581ae3d55d7": {
-      "tasks": [
-        {
-          "id": "task_3d84e746",
-          "title": "打球",
-          "start": "2025-09-28T15:00:00",
-          "end": "2025-09-28T17:00:00",
-          "priority": "medium",
-          "is_recurring": false,
-          "parent_task_id": null,
-          "reminder_type": "none",
-          "is_important": false,
-          "reminder_sent": false,
-          "created_at": "2025-09-27T23:25:20.371303",
-          "updated_at": "2025-09-27T23:25:20.371303"
-        },
-        {
-          "id": "task_55a0427b",
-          "title": "睡觉",
-          "start": "2025-09-28T00:10:16",
-          "end": "2025-09-28T08:10:16",
-          "priority": "medium",
-          "is_recurring": false,
-          "parent_task_id": null,
-          "reminder_type": "none",
-          "is_important": false,
-          "reminder_sent": false,
-          "created_at": "2025-09-28T00:10:24.073782",
-          "updated_at": "2025-09-28T00:10:24.073782"
-        },
-        {
-          "id": "task_d5e0172c",
-          "title": "开会",
-          "start": "2025-09-29T09:00:00",
-          "end": "2025-09-29T10:00:00",
-          "priority": "high",
-          "is_recurring": false,
-          "parent_task_id": null,
-          "reminder_type": "none",
-          "is_important": false,
-          "reminder_sent": false,
-          "created_at": "2025-09-28T00:25:48.633326",
-          "updated_at": "2025-09-28T00:25:48.633326"
-        },
-        {
-          "id": "task_e146f5bb",
-          "title": "开会",
-          "start": "2025-09-29T08:00:00",
-          "end": "2025-09-29T09:00:00",
-          "priority": "medium",
-          "is_recurring": false,
-          "parent_task_id": null,
-          "reminder_type": "none",
-          "is_important": false,
-          "reminder_sent": false,
-          "created_at": "2025-09-28T00:45:11.233544",
-          "updated_at": "2025-09-28T00:45:11.233544"
-        },
-        {
-          "id": "task_dff17ef6",
-          "title": "完成项目报告",
-          "start": "2025-09-29T09:00:00",
-          "end": "2025-09-29T13:00:00",
-          "priority": "high",
-          "is_recurring": false,
-          "parent_task_id": null,
-          "reminder_type": "none",
-          "is_important": false,
-          "reminder_sent": false,
-          "created_at": "2025-09-28T00:54:07.392364",
-          "updated_at": "2025-09-28T00:54:07.392364"
-        },
-        {
-          "id": "task_decd25f9",
-          "title": "完成统计作业",
-          "start": "2025-09-29T02:00:00+00:00",
-          "end": "2025-09-29T05:00:00+00:00",
-          "priority": "medium",
-          "is_recurring": false,
-          "parent_task_id": null,
-          "reminder_type": "none",
-          "is_important": false,
-          "reminder_sent": false,
-          "created_at": "2025-09-28T01:04:39.234633",
-          "updated_at": "2025-09-28T01:04:39.234633"
-        }
-      ]
+      "tasks": []
     },
     "3cefdcf5-3f9f-4e34-ac90-d123263dc38f": {
       "tasks": []
@@ -228,6 +143,6 @@
   },
   "metadata": {
     "version": "2.0",
-    "last_updated": "2025-09-28T01:07:42.610170"
+    "last_updated": "2025-09-28T12:26:33.154569"
   }
 }

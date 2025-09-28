@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { User, Calendar, CheckCircle, Clock, AlertCircle, TrendingUp, Settings, ArrowLeft, Plus, Eye } from 'lucide-react';
+import { User, Calendar, CheckCircle, Clock, AlertCircle, TrendingUp, Settings, ArrowLeft, Plus, Eye, Edit3, Camera, Save, X, Wifi, WifiOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { taskStore, Task } from '../store/taskStore';
 import { useNotification } from '../components/NotificationManager';
 import RealtimeClock from '../components/RealtimeClock';
+import { supabase } from '../lib/supabase';
+import { NetworkStatus, useNetworkStatus } from '../components/NetworkStatus';
 
 interface TaskStats {
   total: number;
@@ -17,9 +19,14 @@ interface TaskStats {
 
 export default function Profile() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { showSuccess } = useNotification();
+  const { user, signOut, refreshUser } = useAuth();
+  const { showSuccess, showError } = useNotification();
   const { tasks, fetchTasks } = taskStore();
+  const { isOnline, checkConnection } = useNetworkStatus();
+  const [userDisplayData, setUserDisplayData] = useState({
+    username: '',
+    avatar_url: ''
+  });
   const [taskStats, setTaskStats] = useState<TaskStats>({
     total: 0,
     completed: 0,
@@ -30,6 +37,13 @@ export default function Profile() {
   });
   const [recentTasks, setRecentTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // 编辑相关状态
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedUsername, setEditedUsername] = useState('');
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -44,6 +58,66 @@ export default function Profile() {
     };
     loadData();
   }, [fetchTasks]);
+
+  // 监听用户数据变化，确保实时更新显示
+  useEffect(() => {
+    if (user) {
+      const username = (user as any)?.user_metadata?.username;
+      const email = user.email || '';
+      
+      // 如果有昵称就使用昵称，否则使用邮箱前缀，最后才使用默认值
+      let displayName = '';
+      if (username && username.trim()) {
+        displayName = username;
+      } else if (email) {
+        // 使用邮箱@前面的部分作为显示名
+        displayName = email.split('@')[0];
+      } else {
+        displayName = '朋友';
+      }
+      
+      setUserDisplayData({
+        username: displayName,
+        avatar_url: (user as any)?.user_metadata?.avatar_url || ''
+      });
+      
+      // 初始化编辑状态
+      setEditedUsername(username || '');
+      setAvatarPreview((user as any)?.user_metadata?.avatar_url || null);
+    }
+  }, [user]);
+
+  // 监听用户数据更新事件
+  useEffect(() => {
+    const handleUserDataUpdate = () => {
+      if (user) {
+        const username = (user as any)?.user_metadata?.username;
+        const email = user.email || '';
+        
+        let displayName = '';
+        if (username && username.trim()) {
+          displayName = username;
+        } else if (email) {
+          displayName = email.split('@')[0];
+        } else {
+          displayName = '朋友';
+        }
+        
+        setUserDisplayData({
+          username: displayName,
+          avatar_url: (user as any)?.user_metadata?.avatar_url || ''
+        });
+        
+        setEditedUsername(username || '');
+        setAvatarPreview((user as any)?.user_metadata?.avatar_url || null);
+      }
+    };
+
+    window.addEventListener('userDataUpdated', handleUserDataUpdate);
+    return () => window.removeEventListener('userDataUpdated', handleUserDataUpdate);
+  }, [user]);
+
+
 
   useEffect(() => {
     if (tasks.length > 0) {
@@ -165,6 +239,308 @@ export default function Profile() {
     });
   };
 
+  // 处理头像文件选择
+  const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // 检查文件大小（5MB限制）
+      if (file.size > 5 * 1024 * 1024) {
+        showError('文件过大', `头像文件大小不能超过5MB，当前文件大小：${(file.size / 1024 / 1024).toFixed(2)}MB`);
+        return;
+      }
+      
+      // 检查文件类型
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) {
+        showError('文件格式不支持', `请选择有效的图片文件（JPG、PNG、GIF、WebP），当前文件类型：${file.type}`);
+        return;
+      }
+      
+      console.log('选择的头像文件:', {
+        name: file.name,
+        size: `${(file.size / 1024 / 1024).toFixed(2)}MB`,
+        type: file.type
+      });
+      
+      setAvatarFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setAvatarPreview(e.target?.result as string);
+        showSuccess('文件选择成功', '头像预览已更新，请点击保存修改');
+      };
+      reader.onerror = () => {
+        showError('文件读取失败', '无法读取选择的图片文件，请重新选择');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // 网络连接检查函数
+  const checkNetworkConnection = async (): Promise<boolean> => {
+    if (!isOnline) {
+      showError('网络连接已断开', '请检查网络设置后重试');
+      return false;
+    }
+
+    const connected = await checkConnection();
+    if (!connected) {
+      showError('网络连接不稳定', '请稍后重试');
+      return false;
+    }
+    
+    return true;
+  };
+
+  // 判断是否为网络相关错误
+  const isNetworkError = (error: any): boolean => {
+    const errorMessage = error.message || '';
+    const networkErrorPatterns = [
+      'Failed to fetch',
+      'ERR_NETWORK',
+      'ERR_INTERNET_DISCONNECTED',
+      'ERR_SOCKET_NOT_CONNECTED',
+      'Network request failed',
+      'fetch is not defined',
+      'AbortError',
+      'TimeoutError'
+    ];
+    
+    return networkErrorPatterns.some(pattern => 
+      errorMessage.includes(pattern)
+    ) && !errorMessage.includes('404') && !errorMessage.includes('Not Found');
+  };
+
+  // 重试机制函数
+  const retryOperation = async <T>(
+    operation: () => Promise<T>,
+    maxRetries: number = 3,
+    delay: number = 1000
+  ): Promise<T> => {
+    let lastError: any;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error: any) {
+        lastError = error;
+        console.log(`操作失败，第 ${attempt} 次尝试:`, error.message);
+        
+        // 如果是最后一次尝试，直接抛出错误
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        
+        // 检查是否是网络相关错误
+        if (error.message.includes('Failed to fetch') || 
+            error.message.includes('ERR_SOCKET_NOT_CONNECTED') ||
+            error.message.includes('ERR_NETWORK') ||
+            error.name === 'AuthRetryableFetchError') {
+          
+          // 检查网络连接
+          const isConnected = await checkNetworkConnection();
+          if (!isConnected) {
+            console.log('网络连接检查失败，等待重试...');
+            await new Promise(resolve => setTimeout(resolve, delay * attempt));
+            continue;
+          }
+        }
+        
+        // 对于其他错误，等待后重试
+        await new Promise(resolve => setTimeout(resolve, delay * attempt));
+      }
+    }
+    
+    throw lastError;
+  };
+
+  // 保存修改
+  const handleSaveChanges = async () => {
+    if (!user) return;
+    
+    setIsSaving(true);
+    try {
+
+      // 检查用户认证状态
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('登录状态已过期，请重新登录');
+      }
+
+      let avatarUrl = (user as any)?.user_metadata?.avatar_url;
+      
+      // 如果有新头像，先上传
+      if (avatarFile) {
+        const fileExt = avatarFile.name.split('.').pop();
+        const fileName = `${user.id}.${fileExt}`;
+        
+        console.log('开始上传头像:', {
+          fileName,
+          fileSize: `${(avatarFile.size / 1024 / 1024).toFixed(2)}MB`,
+          fileType: avatarFile.type
+        });
+        
+        try {
+          // 使用重试机制上传头像
+          await retryOperation(async () => {
+            // 先删除旧文件（如果存在）
+            const { error: removeError } = await supabase.storage
+              .from('avatars')
+              .remove([fileName]);
+            
+            if (removeError) {
+              console.log('删除旧头像文件时出现错误（可能文件不存在）:', removeError.message);
+            }
+            
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from('avatars')
+              .upload(fileName, avatarFile, { 
+                cacheControl: '3600',
+                upsert: true 
+              });
+            
+            if (uploadError) {
+              console.error('头像上传失败:', uploadError);
+              if (uploadError.message.includes('Bucket not found')) {
+                throw new Error('存储服务配置错误，请联系管理员');
+              } else if (uploadError.message.includes('File size')) {
+                throw new Error('文件大小超出限制，请选择更小的图片');
+              } else if (uploadError.message.includes('Invalid file type')) {
+                throw new Error('不支持的文件格式，请选择JPG、PNG或WebP格式的图片');
+              } else {
+                throw new Error(`头像上传失败: ${uploadError.message}`);
+              }
+            }
+            
+            console.log('头像上传成功:', uploadData);
+            return uploadData;
+          });
+          
+          const { data: { publicUrl } } = supabase.storage
+            .from('avatars')
+            .getPublicUrl(fileName);
+          
+          avatarUrl = publicUrl;
+          console.log('头像URL:', avatarUrl);
+        } catch (storageError: any) {
+          console.error('头像存储操作失败:', storageError);
+          throw storageError;
+        }
+      }
+      
+      // 更新用户元数据
+      const newUsername = editedUsername.trim() || '用户';
+      console.log('开始更新用户信息:', {
+        username: newUsername,
+        avatar_url: avatarUrl,
+        userId: user.id
+      });
+      
+      // 使用重试机制更新用户信息
+      const updateData = await retryOperation(async () => {
+        const { data, error } = await supabase.auth.updateUser({
+          data: {
+            username: newUsername,
+            avatar_url: avatarUrl
+          }
+        });
+        
+        if (error) {
+          console.error('用户信息更新失败:', error);
+          if (error.message.includes('Invalid user')) {
+            throw new Error('用户身份验证失败，请重新登录');
+          } else if (error.message.includes('Rate limit')) {
+            throw new Error('操作过于频繁，请稍后再试');
+          } else if (isNetworkError(error)) {
+            throw new Error('网络连接失败，正在重试...');
+          } else if (error.message.includes('404') || error.message.includes('Not Found')) {
+            throw new Error(`服务错误: ${error.message}`);
+          } else {
+            throw new Error(`用户信息更新失败: ${error.message}`);
+          }
+        }
+        
+        return data;
+      });
+      
+      console.log('用户信息更新成功:', updateData);
+      
+      // 刷新用户数据以更新界面显示
+      try {
+        await retryOperation(async () => {
+          await refreshUser();
+        });
+        console.log('用户数据刷新成功');
+      } catch (refreshError: any) {
+        console.error('用户数据刷新失败:', refreshError);
+        // 即使刷新失败，也不阻止保存成功的提示
+      }
+      
+      // 立即更新本地状态以确保界面实时更新
+      setEditedUsername(newUsername);
+      if (avatarUrl) {
+        setAvatarPreview(avatarUrl);
+      }
+      
+      const successMessage = avatarFile && newUsername !== ((user as any)?.user_metadata?.username || '') 
+        ? '头像和昵称已成功更新' 
+        : avatarFile 
+        ? '头像已成功更新' 
+        : '昵称已成功更新';
+      
+      showSuccess('保存成功', successMessage);
+      setIsEditing(false);
+      setAvatarFile(null);
+      
+      // 强制触发页面重新渲染以确保所有组件都能获取到最新的用户数据
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userDataUpdated', {
+          detail: {
+            username: newUsername,
+            avatar_url: avatarUrl
+          }
+        }));
+      }, 100);
+    } catch (error: any) {
+      console.error('保存失败:', error);
+      
+      // 根据错误类型提供更具体的错误信息
+      let errorTitle = '保存失败';
+      let errorMessage = error.message || '保存个人信息时发生未知错误';
+      
+      // 使用新的网络错误判断函数
+      if (isNetworkError(error)) {
+        errorTitle = '网络错误';
+        errorMessage = '网络连接不稳定，请检查网络后重试';
+      } else if (error.message.includes('404') || error.message.includes('Not Found')) {
+        errorTitle = '服务错误';
+        errorMessage = '服务暂时不可用，请稍后重试或联系管理员';
+      } else if (error.message.includes('存储')) {
+        errorTitle = '文件上传失败';
+        errorMessage = '头像上传失败，请重新选择图片或稍后重试';
+      } else if (error.message.includes('身份验证') || 
+                 error.message.includes('登录状态') ||
+                 error.message.includes('Invalid user')) {
+        errorTitle = '身份验证失败';
+        errorMessage = '登录状态已过期，请重新登录';
+      } else if (error.message.includes('频繁')) {
+        errorTitle = '操作频繁';
+        errorMessage = '操作过于频繁，请稍后再试';
+      }
+      
+      showError(errorTitle, errorMessage);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 取消编辑
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditedUsername((user as any)?.user_metadata?.username || '');
+    setAvatarPreview((user as any)?.user_metadata?.avatar_url || null);
+    setAvatarFile(null);
+  };
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'high': return 'text-red-600 bg-red-100';
@@ -196,6 +572,7 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <NetworkStatus />
       <div className="container mx-auto px-4 py-8">
         {/* 头部导航 */}
         <div className="flex items-center justify-between mb-8">
@@ -217,6 +594,44 @@ export default function Profile() {
             <div className="bg-white rounded-lg shadow-md px-4 py-2">
               <RealtimeClock showSeconds={true} showDate={true} />
             </div>
+            <div className="flex items-center space-x-2">
+              {!isEditing ? (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="flex items-center px-3 py-2 text-blue-600 hover:text-blue-800 transition-colors rounded-lg hover:bg-blue-50"
+                >
+                  <Edit3 className="w-4 h-4 mr-1" />
+                  编辑
+                </button>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleSaveChanges}
+                    disabled={isSaving || !isOnline}
+                    className="flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    {!isOnline ? (
+                      <>
+                        <WifiOff className="w-4 h-4 mr-1" />
+                        网络断开
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-1" />
+                        {isSaving ? '保存中...' : '保存'}
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="flex items-center px-3 py-2 text-gray-600 hover:text-gray-800 transition-colors rounded-lg hover:bg-gray-100"
+                  >
+                    <X className="w-4 h-4 mr-1" />
+                    取消
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               onClick={() => showSuccess('设置功能', '个人设置功能即将上线')}
               className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors shadow-md"
@@ -233,13 +648,55 @@ export default function Profile() {
             {/* 用户信息卡片 */}
             <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
               <div className="text-center">
-                <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <User className="text-white" size={32} />
+                <div className="relative mx-auto mb-4">
+                  {isEditing ? (
+                    <div className="relative">
+                      <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center mx-auto">
+                        {avatarPreview ? (
+                          <img src={avatarPreview} alt="头像预览" className="w-full h-full object-cover" />
+                        ) : (
+                          <User className="w-10 h-10 text-gray-400" />
+                        )}
+                      </div>
+                      <label className="absolute -bottom-1 -right-1 w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center cursor-pointer hover:bg-blue-700 transition-colors">
+                        <Camera className="w-3 h-3 text-white" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleAvatarChange}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="w-20 h-20 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mx-auto">
+                      {(user as any)?.user_metadata?.avatar_url ? (
+                        <img src={(user as any).user_metadata.avatar_url} alt="用户头像" className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="text-white" size={32} />
+                      )}
+                    </div>
+                  )}
                 </div>
-                <h2 className="text-xl font-bold text-gray-800 mb-1">
-                  {(user as any)?.user_metadata?.username || user?.email?.split('@')[0] || '用户'}
-                </h2>
-                <p className="text-gray-600 text-sm mb-4">{user?.email}</p>
+                {isEditing ? (
+                  <div className="space-y-2 mb-4">
+                    <input
+                      type="text"
+                      value={editedUsername}
+                      onChange={(e) => setEditedUsername(e.target.value)}
+                      placeholder="请输入昵称"
+                      className="text-xl font-bold text-gray-800 bg-transparent border-b-2 border-blue-300 focus:border-blue-500 outline-none w-full text-center"
+                    />
+                    <p className="text-gray-600 text-sm">{user?.email}</p>
+                  </div>
+                ) : (
+                  <div className="mb-4">
+                     <h2 className="text-xl font-bold text-gray-800 mb-1">
+                       {editedUsername || userDisplayData.username}
+                     </h2>
+                     <p className="text-gray-600 text-sm">{user?.email}</p>
+                   </div>
+                )}
                 <div className="flex flex-col items-center gap-2 text-sm text-gray-500">
                   <div className="flex items-center gap-2">
                     <Calendar size={16} />

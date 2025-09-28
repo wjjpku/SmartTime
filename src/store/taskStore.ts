@@ -79,18 +79,78 @@ const api = axios.create({
 // 请求拦截器：添加认证token
 api.interceptors.request.use(
   async (config) => {
-    const { data: { session } } = await supabase.auth.getSession()
-    console.log('[FRONTEND DEBUG] 获取到的session:', session)
-    if (session?.access_token) {
-      console.log('[FRONTEND DEBUG] 添加Authorization header:', `Bearer ${session.access_token.substring(0, 20)}...`)
-      config.headers.Authorization = `Bearer ${session.access_token}`
-    } else {
-      console.log('[FRONTEND DEBUG] 没有找到access_token')
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      
+      if (error) {
+        console.error('[AUTH ERROR] 获取session失败:', error)
+        throw new Error('认证失败，请重新登录')
+      }
+      
+      if (session?.access_token) {
+        config.headers.Authorization = `Bearer ${session.access_token}`
+        console.log('[AUTH SUCCESS] 已添加认证头')
+      } else {
+        console.warn('[AUTH WARNING] 未找到有效的access_token，用户可能未登录')
+        throw new Error('用户未登录，请先登录')
+      }
+      
+      return config
+    } catch (error: any) {
+      console.error('[AUTH ERROR] 请求拦截器错误:', error)
+      // 如果是认证相关错误，重定向到登录页
+      if (error.message.includes('登录') || error.message.includes('认证')) {
+        window.location.href = '/login'
+      }
+      return Promise.reject(error)
     }
-    return config
   },
   (error) => {
-    console.log('[FRONTEND DEBUG] 请求拦截器错误:', error)
+    console.error('[REQUEST ERROR] 请求配置错误:', error)
+    return Promise.reject(error)
+  }
+)
+
+// 响应拦截器：处理认证错误
+api.interceptors.response.use(
+  (response) => {
+    return response
+  },
+  async (error) => {
+    const originalRequest = error.config
+    
+    // 处理401未授权错误
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true
+      
+      console.log('[AUTH DEBUG] 收到401错误，尝试刷新token')
+      
+      try {
+        // 尝试刷新session
+        const { data: { session }, error: refreshError } = await supabase.auth.refreshSession()
+        
+        if (refreshError || !session?.access_token) {
+          console.error('[AUTH ERROR] Session刷新失败，重定向到登录页:', refreshError)
+          // 清除本地存储的认证信息
+          await supabase.auth.signOut()
+          window.location.href = '/login'
+          return Promise.reject(error)
+        }
+        
+        console.log('[AUTH DEBUG] Token刷新成功，重试请求')
+        // 更新请求头并重试
+        originalRequest.headers.Authorization = `Bearer ${session.access_token}`
+        return api(originalRequest)
+      } catch (refreshError) {
+        console.error('[AUTH ERROR] 刷新认证失败:', refreshError)
+        await supabase.auth.signOut()
+        window.location.href = '/login'
+        return Promise.reject(error)
+      }
+    }
+    
+    // 如果不是401错误或已经重试过，直接返回错误
+    console.error('[API ERROR] 请求失败:', error.response?.status, error.response?.data)
     return Promise.reject(error)
   }
 )

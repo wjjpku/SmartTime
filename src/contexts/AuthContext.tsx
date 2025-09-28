@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { supabase, User } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import { Session } from '@supabase/supabase-js'
+
+interface User {
+  id: string
+  email: string | undefined
+  username?: string
+  avatar_url?: string
+}
 
 interface AuthContextType {
   user: User | null
@@ -10,6 +17,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, username: string) => Promise<{ error: any }>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<{ error: any }>
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -29,13 +37,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // 获取初始会话
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ? {
-        id: session.user.id,
-        email: session.user.email,
-        username: session.user.user_metadata?.username
-      } : null)
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('获取初始会话失败:', error)
+        setSession(null)
+        setUser(null)
+      } else {
+        setSession(session)
+        setUser(session?.user ? {
+          id: session.user.id,
+          email: session.user.email,
+          username: session.user.user_metadata?.username,
+          avatar_url: session.user.user_metadata?.avatar_url
+        } : null)
+      }
       setLoading(false)
     })
 
@@ -43,13 +58,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('认证状态变化:', event, session?.user?.id)
+      
       setSession(session)
       setUser(session?.user ? {
         id: session.user.id,
         email: session.user.email,
-        username: session.user.user_metadata?.username
+        username: session.user.user_metadata?.username,
+        avatar_url: session.user.user_metadata?.avatar_url
       } : null)
       setLoading(false)
+      
+      // 处理特定的认证事件
+      if (event === 'SIGNED_OUT') {
+        console.log('用户已登出，清除本地状态')
+        setSession(null)
+        setUser(null)
+      } else if (event === 'TOKEN_REFRESHED') {
+        console.log('Token已刷新')
+      } else if (event === 'SIGNED_IN') {
+        console.log('用户已登录')
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -88,6 +117,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error }
   }
 
+  const refreshUser = async () => {
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser()
+      if (error) throw error
+      
+      if (user) {
+        const updatedUser = {
+          id: user.id,
+          email: user.email,
+          username: user.user_metadata?.username,
+          avatar_url: user.user_metadata?.avatar_url
+        }
+        setUser(updatedUser)
+        console.log('用户信息已刷新:', updatedUser)
+      } else {
+        setUser(null)
+      }
+    } catch (error) {
+      console.error('刷新用户信息失败:', error)
+    }
+  }
+
   const value = {
     user,
     session,
@@ -96,6 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUp,
     signOut,
     resetPassword,
+    refreshUser,
   }
 
   return (

@@ -19,23 +19,34 @@ class AuthMiddleware:
             
             # 使用Supabase Auth API验证token
             import httpx
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(
                     f"{settings.supabase_url}/auth/v1/user",
                     headers={
                         "Authorization": f"Bearer {token}",
-                        "apikey": settings.supabase_anon_key
+                        "apikey": settings.supabase_anon_key,
+                        "Content-Type": "application/json"
                     }
                 )
                 
                 if response.status_code == 200:
                     user_data = response.json()
                     print(f"[AUTH DEBUG] Supabase API验证成功，用户: {user_data.get('id')}")
-                    return {"sub": user_data.get("id"), "email": user_data.get("email")}
+                    return {
+                        "sub": user_data.get("id"), 
+                        "email": user_data.get("email"),
+                        "user_metadata": user_data.get("user_metadata", {})
+                    }
+                elif response.status_code == 401:
+                    print(f"[AUTH DEBUG] Token已过期或无效，状态码: {response.status_code}")
+                    return None
                 else:
-                    print(f"[AUTH DEBUG] Supabase API验证失败，状态码: {response.status_code}")
+                    print(f"[AUTH DEBUG] Supabase API验证失败，状态码: {response.status_code}, 响应: {response.text}")
                     return None
                     
+        except httpx.TimeoutException:
+            print(f"[AUTH DEBUG] Supabase API请求超时")
+            return None
         except Exception as e:
             print(f"[AUTH DEBUG] Supabase API验证异常: {type(e).__name__}: {str(e)}")
             import traceback
