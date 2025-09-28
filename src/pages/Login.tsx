@@ -28,23 +28,58 @@ export default function Login() {
 
     setLoading(true)
     
+    // 检查网络连接
+    const isConnected = await checkNetworkConnection()
+    if (!isConnected) {
+      toast.error('网络连接不可用，请检查网络设置后重试')
+      setLoading(false)
+      return
+    }
+    
     try {
       const { error } = await signIn(email, password)
       
       if (error) {
-        if (error.message.includes('Invalid login credentials')) {
+        console.log('登录错误详情:', error)
+        
+        // 网络相关错误
+        if (error.message.includes('Failed to fetch') || 
+            error.message.includes('Network request failed') ||
+            error.message.includes('fetch') ||
+            error.message.includes('NetworkError') ||
+            !navigator.onLine) {
+          toast.error('网络连接失败，请检查网络设置后重试')
+        }
+        // Supabase认证错误
+        else if (error.message.includes('Invalid login credentials')) {
           toast.error('邮箱或密码错误')
-        } else if (error.message.includes('Email not confirmed')) {
+        } 
+        else if (error.message.includes('Email not confirmed')) {
           toast.error('请先验证您的邮箱')
-        } else {
-          toast.error(error.message || '登录失败，请重试')
+        }
+        // 服务器错误
+        else if (error.message.includes('Internal server error') || error.message.includes('500')) {
+          toast.error('服务器暂时不可用，请稍后重试')
+        }
+        // 其他错误
+        else {
+          toast.error(`登录失败: ${error.message || '未知错误，请重试'}`)
         }
       } else {
         toast.success('登录成功！')
         navigate('/dashboard')
       }
     } catch (err) {
-      toast.error('登录过程中发生错误')
+      console.error('登录异常:', err)
+      
+      // 更详细的异常处理
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        toast.error('网络连接失败，请检查网络设置')
+      } else if (err instanceof Error) {
+        toast.error(`登录过程中发生错误: ${err.message}`)
+      } else {
+        toast.error('登录过程中发生未知错误，请重试')
+      }
     } finally {
       setLoading(false)
     }
@@ -53,6 +88,35 @@ export default function Login() {
   const isValidEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     return emailRegex.test(email)
+  }
+
+  const checkNetworkConnection = async (): Promise<boolean> => {
+    if (!navigator.onLine) {
+      return false
+    }
+    
+    try {
+      // 直接检查后端API是否可访问（使用完整URL避免代理问题）
+      const response = await fetch('http://localhost:8000/api/health', {
+        method: 'HEAD',
+        cache: 'no-cache',
+        signal: AbortSignal.timeout(5000)
+      })
+      return response.ok
+    } catch {
+      // 如果后端不可用，尝试检查外网连接
+      try {
+        const response = await fetch('https://www.google.com/favicon.ico', {
+          method: 'HEAD',
+          cache: 'no-cache',
+          mode: 'no-cors',
+          signal: AbortSignal.timeout(3000)
+        })
+        return true // 如果能访问外网，说明网络正常
+      } catch {
+        return false
+      }
+    }
   }
 
   const handleGuestMode = () => {

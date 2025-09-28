@@ -25,4 +25,119 @@ dist-ssr
 .vite
 
 # Environment files
+.env
+.env.local
+.env.production
+.env.development
+.env.test
 backend/.env
+backend/.env.local
+backend/.env.production
+backend/.env.development
+backend/.env.test
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Test files
+test_*.js
+test_*.py
+test_*.html
+test_*.md
+*test.html
+*test.js
+*test.py
+
+# Temporary files
+temp_*
+*.tmp
+*.temp
+
+# Debug and fix scripts
+check_*.js
+fix_*.js
+debug_*.js
+
+# Deployment configs (keep only essential ones)
+*.china.*
+aliyun-*
+tencent-*
+ecs-*
+acr-*
+deploy-*
+*-test.sh
+
+# Sensitive files and API keys
+*.key
+*.pem
+*.p12
+*.pfx
+config/secrets.json
+config/production.json
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Local data files
+backend/data/
+
+# Documentation and reports (temporary)
+*_DIAGNOSIS_REPORT.md
+*_TROUBLESHOOTING.md
+*_VERIFICATION.md
+network_diagnostic_report.md
+manual_registration_steps.md
+register_automation.js
+
+# IDE and editor files
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Vercel deployment
+.vercel/
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Cache directories
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.vuepress/dist
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

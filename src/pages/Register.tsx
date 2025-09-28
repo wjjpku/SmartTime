@@ -54,6 +54,11 @@ export default function Register() {
       return false
     }
 
+    if (!isSupabaseCompatibleEmail(email)) {
+      toast.error('邮箱地址不能以数字开头，请使用字母开头的邮箱地址')
+      return false
+    }
+
     if (password.length < 6) {
       toast.error('密码至少需要6个字符')
       return false
@@ -80,6 +85,16 @@ export default function Register() {
   const isValidEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     return emailRegex.test(email)
+  }
+
+  // 检查邮箱是否符合Supabase的验证规则
+  const isSupabaseCompatibleEmail = (email: string) => {
+    // Supabase不接受以数字开头的邮箱
+    const startsWithNumber = /^\d/.test(email)
+    if (startsWithNumber) {
+      return false
+    }
+    return isValidEmail(email)
   }
 
   const isStrongPassword = (password: string) => {
@@ -193,6 +208,7 @@ export default function Register() {
                   required
                 />
               </div>
+              <p className="text-xs text-gray-500 mt-1">请使用字母开头的邮箱地址，如：user@example.com</p>
             </div>
 
             {/* 密码输入 */}

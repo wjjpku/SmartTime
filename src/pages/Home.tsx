@@ -11,6 +11,7 @@ import TaskResultModal from '../components/TaskResultModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../components/NotificationManager';
 import { supabase } from '../lib/supabase';
+import { toast } from 'sonner';
 // import TaskReminder from '../components/TaskReminder'; // 已禁用提醒功能
 
 import DataExport from '../components/DataExport';
@@ -582,7 +583,7 @@ export default function Home() {
   const handleApplyScheduleResult = (selectedSlot: any) => {
     if (selectedSlot && scheduleResults?.work_info) {
       // 创建任务
-      const taskData = {
+      const taskData: Partial<Task> = {
         title: scheduleResults.work_info.title,
         start: selectedSlot.start,
         end: selectedSlot.end,
@@ -590,7 +591,7 @@ export default function Home() {
       };
       
       // 打开任务创建模态框并预填数据
-      setSelectedTask(taskData);
+      setSelectedTask(taskData as Task);
       setModalMode('create');
       setShowModal(true);
       
@@ -708,11 +709,12 @@ export default function Home() {
   const handleDateClick = (dateClickInfo: any) => {
     // 点击日期创建新任务
     setSelectedDate(new Date(dateClickInfo.dateStr));
-    setSelectedTask({
+    const taskData: Partial<Task> = {
       start: dateClickInfo.date.toISOString(),
       end: new Date(dateClickInfo.date.getTime() + 60 * 60 * 1000).toISOString(), // 默认1小时
       priority: 'medium'
-    } as Task);
+    };
+    setSelectedTask(taskData as Task);
     setModalMode('create');
     setShowModal(true);
   };

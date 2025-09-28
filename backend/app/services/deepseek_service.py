@@ -1096,12 +1096,22 @@ class DeepSeekService:
                     # 检查是否与现有任务冲突
                     has_conflict = False
                     for task in existing_tasks:
-                        task_start = datetime.fromisoformat(task['start'])
-                        task_end = datetime.fromisoformat(task['end'])
-                        
-                        if (start_time < task_end and end_time > task_start):
-                            has_conflict = True
-                            break
+                        try:
+                            task_start = datetime.fromisoformat(task['start'])
+                            task_end = datetime.fromisoformat(task['end'])
+                            
+                            # 确保时区一致性，移除时区信息进行比较
+                            if task_start.tzinfo is not None:
+                                task_start = task_start.replace(tzinfo=None)
+                            if task_end.tzinfo is not None:
+                                task_end = task_end.replace(tzinfo=None)
+                            
+                            if (start_time < task_end and end_time > task_start):
+                                has_conflict = True
+                                break
+                        except Exception as e:
+                            print(f"解析任务时间失败: {e}, 任务: {task}")
+                            continue
                     
                     if not has_conflict:
                         # 计算推荐分数

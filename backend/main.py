@@ -9,6 +9,11 @@ SmartTime - FastAPI 后端主入口
 - 本地 JSON 文件存储
 """
 
+from dotenv import load_dotenv
+
+# 加载环境变量 - 必须在其他导入之前
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import tasks, schedule, auth
@@ -52,12 +57,14 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173", 
+        "http://localhost:5174",  # 新增5174端口
         "http://127.0.0.1:5173",  # 本地开发
+        "http://127.0.0.1:5174",  # 新增5174端口
         "https://traedduqw5r8-wjjpku-justin-wus-projects-e244beee.vercel.app",  # Vercel 部署域名
         "https://*.vercel.app"  # 所有 Vercel 域名
     ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],  # 明确指定支持的方法
     allow_headers=["*"],
 )
 
@@ -78,13 +85,22 @@ async def root():
 
 # 健康检查接口
 @app.get("/health")
+@app.head("/health")
+@app.get("/api/health")
+@app.head("/api/health")
 async def health_check():
-    """详细健康检查接口"""
+    """详细健康检查接口，支持GET和HEAD方法"""
     return {
         "status": "healthy",
         "service": "SmartTime",
         "version": "1.0.0"
     }
+
+# OPTIONS 预检请求处理器
+@app.options("/{path:path}")
+async def options_handler(path: str):
+    """处理所有 OPTIONS 预检请求"""
+    return {"message": "OK"}
 
 if __name__ == "__main__":
     import uvicorn

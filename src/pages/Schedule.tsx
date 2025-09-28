@@ -204,7 +204,7 @@ const Schedule: React.FC = () => {
         <div className="relative mb-8">
           {/* 返回主页按钮 */}
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/dashboard')}
             className="absolute left-0 top-0 flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all duration-200 group"
           >
             <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform duration-200" />
