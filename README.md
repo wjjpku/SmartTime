@@ -1,9 +1,27 @@
-# SmartTime - 智能任务管理系统
 
 <div align="center">
-  <img src="https://trae-api-sg.mchost.guru/api/ide/v1/text_to_image?prompt=modern%20minimalist%20calendar%20app%20logo%20with%20AI%20brain%20icon%2C%20blue%20gradient%20background%2C%20clean%20design%2C%20professional%20tech%20style&image_size=square" alt="SmartTime Logo" width="200" height="200">
-  
+  <h1>🚀 SmartTime - 智能任务管理系统</h1>
   <p><strong>基于AI的智能任务管理和日程安排系统</strong></p>
+</div>
+
+## 📸 应用展示
+
+<div align="center">
+  
+### 🏠 应用封面页
+<img src="./screenshots/landing-page.png" alt="SmartTime 封面页" width="800">
+
+### 📊 用户主页面
+<img src="./screenshots/dashboard.png" alt="SmartTime 用户主页面" width="800">
+
+### 👤 用户个人主页
+<img src="./screenshots/profile-page.png" alt="SmartTime 用户个人主页" width="800">
+
+</div>
+
+---
+
+<div align="center">
   
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![React](https://img.shields.io/badge/React-18.3.1-blue.svg)](https://reactjs.org/)
@@ -70,8 +88,8 @@ SmartTime 是一个基于自然语言处理的智能任务管理系统，让用�
 
 1. **克隆项目**
    ```bash
-   git clone https://github.com/your-username/smarttime.git
-   cd smarttime
+   git clone https://github.com/wjjpku/TRAE-project.git
+   cd TRAE-project
    ```
 
 2. **安装依赖**
