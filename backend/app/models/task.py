@@ -165,3 +165,32 @@ class BatchDeleteResponse(BaseModel):
     deleted_tasks: List[Task] = Field(default=[], description="被删除的任务列表")
     message: str = Field(..., description="操作结果消息")
     error: Optional[str] = Field(None, description="错误信息（删除失败时）")
+
+class BatchCreateRequest(BaseModel):
+    """批量创建任务请求模型"""
+    tasks: List[TaskCreate] = Field(..., description="要创建的任务列表")
+
+class BatchCreateResponse(BaseModel):
+    """批量创建任务响应模型"""
+    success: bool = Field(..., description="创建是否成功")
+    created_count: int = Field(..., description="创建的任务数量")
+    created_tasks: List[Task] = Field(default=[], description="创建的任务列表")
+    message: str = Field(..., description="操作结果消息")
+    error: Optional[str] = Field(None, description="错误信息（创建失败时）")
+
+class TaskUpdateItem(BaseModel):
+    """批量更新任务项模型"""
+    task_id: str = Field(..., description="要更新的任务ID")
+    task_update: TaskUpdate = Field(..., description="更新的任务数据")
+
+class BatchUpdateRequest(BaseModel):
+    """批量更新任务请求模型"""
+    updates: List[TaskUpdateItem] = Field(..., description="要更新的任务列表")
+
+class BatchUpdateResponse(BaseModel):
+    """批量更新任务响应模型"""
+    success: bool = Field(..., description="更新是否成功")
+    updated_count: int = Field(..., description="更新的任务数量")
+    updated_tasks: List[Task] = Field(default=[], description="更新的任务列表")
+    message: str = Field(..., description="操作结果消息")
+    error: Optional[str] = Field(None, description="错误信息（更新失败时）")

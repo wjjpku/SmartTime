@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Brain, Calendar, Clock, CheckCircle, AlertCircle, X, Home, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '../lib/supabase';
 
 interface WorkInfo {
   title: string;
@@ -56,10 +57,18 @@ const Schedule: React.FC = () => {
     }, 70000); // 70秒超时，确保与后端60秒超时匹配并留有余量
 
     try {
-      const response = await fetch('/api/schedule/analyze', {
+      // 获取认证token
+      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      
+      if (authError || !session?.access_token) {
+        throw new Error('用户未登录或认证已过期，请重新登录');
+      }
+
+      const response = await fetch('http://localhost:8000/api/schedule/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ description }),
         signal: controller.signal,
@@ -105,10 +114,18 @@ const Schedule: React.FC = () => {
 
     setIsConfirming(true);
     try {
-      const response = await fetch('/api/schedule/confirm', {
+      // 获取认证token
+      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      
+      if (authError || !session?.access_token) {
+        throw new Error('用户未登录或认证已过期，请重新登录');
+      }
+
+      const response = await fetch('http://localhost:8000/api/schedule/confirm', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           work_info: workInfo,

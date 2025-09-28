@@ -19,6 +19,11 @@ from .task import (
     TaskDeleteResponse,
     BatchDeleteRequest,
     BatchDeleteResponse,
+    BatchCreateRequest,
+    BatchCreateResponse,
+    TaskUpdateItem,
+    BatchUpdateRequest,
+    BatchUpdateResponse,
     RecurrenceRule,
     RecurrenceFrequency
 )
@@ -38,6 +43,11 @@ __all__ = [
     "TaskDeleteResponse",
     "BatchDeleteRequest",
     "BatchDeleteResponse",
+    "BatchCreateRequest",
+    "BatchCreateResponse",
+    "TaskUpdateItem",
+    "BatchUpdateRequest",
+    "BatchUpdateResponse",
     "RecurrenceRule",
     "RecurrenceFrequency"
 ]

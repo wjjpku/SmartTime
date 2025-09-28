@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { taskStore, Task, TaskCreate, TaskUpdate, RecurrenceRule } from '../store/taskStore';
 // import ReminderSettings from './ReminderSettings'; // 已禁用提醒功能
 import { useNotification } from './NotificationManager';
+import { supabase } from '../lib/supabase';
 
 interface WorkInfo {
   title: string;
@@ -54,11 +55,11 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
   });
   
   const [deleteText, setDeleteText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  // 移除本地isLoading状态，使用taskStore中的细粒度加载状态
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
 
-  const { createTask, updateTask, deleteTask, analyzeSchedule } = taskStore();
+  const { createTask, updateTask, deleteTask, analyzeSchedule, loadingStates, setLoadingState } = taskStore();
   const { showSuccess, showError, showInfo } = useNotification();
   
   const isEditing = mode === 'edit' && task && 'id' in task && task.id;
@@ -124,8 +125,6 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
       return;
     }
 
-    setIsLoading(true);
-    
     try {
       const taskData: any = {
         title: formData.title.trim(),
@@ -165,8 +164,6 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
     } catch (error) {
       console.error('[TASK MODAL DEBUG] 任务提交失败:', error);
       showError(isEditing ? '更新任务失败' : '创建任务失败');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -176,12 +173,15 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
       return;
     }
 
-    setIsLoading(true);
     try {
-      const response = await fetch('/api/tasks/delete', {
+      setLoadingState('deleting', true);
+      
+      // 使用taskStore中配置好的API来发送删除请求
+      const response = await fetch('http://localhost:8000/api/tasks/delete', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
         },
         body: JSON.stringify({
           description: deleteText
@@ -189,6 +189,9 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
       });
       
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('认证已过期，请重新登录');
+        }
         throw new Error('删除任务失败');
       }
       
@@ -197,15 +200,23 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
       
       if (result.deleted_count > 0) {
         showSuccess(`成功删除了 ${result.deleted_count} 个任务！`);
+        // 刷新任务列表
+        await taskStore.getState().fetchTasks();
       } else {
         showInfo('没有找到匹配的任务');
       }
       
       onSave();
-    } catch (error) {
-      showError('删除任务失败，请重试');
+    } catch (error: any) {
+      console.error('删除任务失败:', error);
+      if (error.message.includes('认证') || error.message.includes('登录')) {
+        showError('认证已过期，请重新登录');
+        // 可以考虑重定向到登录页
+      } else {
+        showError(error.message || '删除任务失败，请重试');
+      }
     } finally {
-      setIsLoading(false);
+      setLoadingState('deleting', false);
     }
   };
 
@@ -217,7 +228,6 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
   const confirmDirectDelete = async () => {
     if (!isEditing || !task?.id) return;
     
-    setIsLoading(true);
     setShowDeleteConfirm(false);
     
     try {
@@ -226,8 +236,6 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
       onSave();
     } catch (error) {
       showError('删除任务失败');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -311,7 +319,7 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                       'border-red-200 focus:ring-red-500'
                     }`}
                     rows={4}
-                    disabled={isLoading}
+                    disabled={loadingStates.creating || loadingStates.updating}
                     maxLength={100}
                     required
                   />
@@ -352,7 +360,7 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                     formData.title.length === 100 ? 'border-red-300 focus:ring-red-500' : 
                     'border-gray-300 focus:ring-blue-500'
                   }`}
-                  disabled={isLoading}
+                  disabled={loadingStates.creating || loadingStates.updating}
                   maxLength={100}
                   required
                 />
@@ -380,7 +388,7 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                   value={formData.start}
                   onChange={(e) => setFormData({ ...formData, start: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  disabled={isLoading}
+                  disabled={loadingStates.creating || loadingStates.updating}
                   required
                 />
               </div>
@@ -397,7 +405,7 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                   value={formData.end}
                   onChange={(e) => setFormData({ ...formData, end: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  disabled={isLoading}
+                  disabled={loadingStates.deleting}
                   min={formData.start}
                 />
               </div>
@@ -419,7 +427,7 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                           ? `border-blue-500 ${option.bgColor} ${option.color}`
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
-                      disabled={isLoading}
+                      disabled={loadingStates.creating || loadingStates.updating}
                     >
                       <div className="text-sm font-medium">{option.label}</div>
                     </button>
@@ -433,7 +441,7 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                 isImportant={formData.is_important}
                 onReminderTypeChange={(type) => setFormData({ ...formData, reminder_type: type })}
                 onImportantChange={(important) => setFormData({ ...formData, is_important: important })}
-                disabled={isLoading}
+                disabled={loadingStates.deleting || loadingStates.creating || loadingStates.updating}
               /> */}
 
               {/* 重复任务设置 */}
@@ -451,7 +459,7 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                         formData.is_recurring ? 'bg-blue-600' : 'bg-gray-200'
                       }`}
-                      disabled={isLoading}
+                      disabled={loadingStates.creating || loadingStates.updating}
                     >
                       <span
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -479,7 +487,7 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                             }
                           })}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          disabled={isLoading}
+                          disabled={loadingStates.creating || loadingStates.updating}
                         >
                           <option value="daily">每日</option>
                           <option value="weekly">每周</option>
@@ -508,7 +516,7 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                               }
                             })}
                             className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            disabled={isLoading}
+                            disabled={loadingStates.creating || loadingStates.updating}
                           />
                           <span className="text-sm text-gray-600">
                             {formData.recurrence_rule.frequency === 'daily' ? '天' :
@@ -550,7 +558,7 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
                                     ? 'border-blue-500 bg-blue-100 text-blue-700'
                                     : 'border-gray-200 hover:border-gray-300'
                                 }`}
-                                disabled={isLoading}
+                                disabled={loadingStates.creating || loadingStates.updating}
                               >
                                 {day}
                               </button>
@@ -608,7 +616,7 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
               <button
                 type="button"
                 onClick={handleDirectDelete}
-                disabled={isLoading}
+                disabled={loadingStates.deleting}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
                 <Trash2 size={16} />
@@ -620,26 +628,26 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
               <button
                 type="button"
                 onClick={onClose}
-                disabled={isLoading}
+                disabled={loadingStates.deleting}
                 className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 取消
               </button>
               <button
                 type="submit"
-                disabled={isLoading || (isDeleting && !deleteText.trim()) || (!isDeleting && !formData.title.trim())}
+                disabled={(loadingStates.deleting || loadingStates.creating || loadingStates.updating) || (isDeleting && !deleteText.trim()) || (!isDeleting && !formData.title.trim())}
                 className={`px-6 py-2 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 ${
                   isDeleting ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
-                {isLoading ? (
+                {(loadingStates.deleting || loadingStates.creating || loadingStates.updating) ? (
                   <Loader2 className="animate-spin" size={16} />
                 ) : isDeleting ? (
                   <Trash2 size={16} />
                 ) : (
                   <Save size={16} />
                 )}
-                {isLoading ? 
+                {(loadingStates.deleting || loadingStates.creating || loadingStates.updating) ? 
                   (isDeleting ? '删除中...' : '保存中...') : 
                   (isDeleting ? 'AI 智能删除' : '保存')
                 }
@@ -671,7 +679,7 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
               <button
                 type="button"
                 onClick={cancelDirectDelete}
-                disabled={isLoading}
+                disabled={loadingStates.deleting}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 取消
@@ -679,15 +687,15 @@ export default function UnifiedTaskModal({ mode, task, onClose, onSave }: Unifie
               <button
                 type="button"
                 onClick={confirmDirectDelete}
-                disabled={isLoading}
+                disabled={loadingStates.deleting}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
-                {isLoading ? (
+                {loadingStates.deleting ? (
                   <Loader2 className="animate-spin" size={16} />
                 ) : (
                   <Trash2 size={16} />
                 )}
-                {isLoading ? '删除中...' : '确认删除'}
+                {loadingStates.deleting ? '删除中...' : '确认删除'}
               </button>
             </div>
           </div>

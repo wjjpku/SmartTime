@@ -21,7 +21,90 @@ class DeepSeekService:
         self.settings = settings
         self.api_url = settings.deepseek_api_url
         self.model = settings.deepseek_model
-        self.timeout = 30.0
+        self.timeout = 15.0  # 减少超时时间到15秒
+        
+        # 添加缓存机制
+        self._cache = {}
+        self._cache_ttl = 600  # 扩展缓存时间到10分钟
+        self._cache_timestamps = {}
+        
+        # 连接池配置
+        self._client_limits = httpx.Limits(
+            max_keepalive_connections=5,
+            max_connections=10,
+            keepalive_expiry=30.0
+        )
+        
+        # 重试配置
+        self.max_retries = 3
+        self.retry_delay = 1.0  # 初始重试延迟1秒
+    
+    def _get_cache_key(self, text: str, prompt_type: str = "parse") -> str:
+        """生成缓存键"""
+        import hashlib
+        content = f"{prompt_type}:{text}"
+        return hashlib.md5(content.encode()).hexdigest()
+    
+    def _get_cached_result(self, cache_key: str):
+        """获取缓存结果"""
+        if cache_key not in self._cache:
+            return None
+        
+        # 检查缓存是否过期
+        if cache_key in self._cache_timestamps:
+            cache_time = self._cache_timestamps[cache_key]
+            if (datetime.now() - cache_time).total_seconds() > self._cache_ttl:
+                # 缓存过期，删除
+                del self._cache[cache_key]
+                del self._cache_timestamps[cache_key]
+                return None
+        
+        return self._cache[cache_key]
+    
+    def _set_cache_result(self, cache_key: str, result):
+        """设置缓存结果"""
+        self._cache[cache_key] = result
+        self._cache_timestamps[cache_key] = datetime.now()
+    
+    async def _make_api_request_with_retry(self, payload: dict, headers: dict) -> dict:
+        """带重试机制的API请求"""
+        last_exception = None
+        
+        for attempt in range(self.max_retries):
+            try:
+                async with httpx.AsyncClient(
+                    timeout=self.timeout,
+                    limits=self._client_limits
+                ) as client:
+                    response = await client.post(
+                        self.api_url,
+                        headers=headers,
+                        json=payload
+                    )
+                    
+                    if response.status_code == 200:
+                        return response.json()
+                    elif response.status_code == 429:  # 速率限制
+                        if attempt < self.max_retries - 1:
+                            await asyncio.sleep(self.retry_delay * (2 ** attempt))  # 指数退避
+                            continue
+                    elif response.status_code >= 500:  # 服务器错误
+                        if attempt < self.max_retries - 1:
+                            await asyncio.sleep(self.retry_delay)
+                            continue
+                    
+                    raise Exception(f"DeepSeek API 请求失败: {response.status_code} - {response.text}")
+                    
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                last_exception = e
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(self.retry_delay)
+                    continue
+            except Exception as e:
+                raise e
+        
+        # 所有重试都失败了
+        raise Exception(f"DeepSeek API 请求失败，已重试 {self.max_retries} 次: {last_exception}")
     
     def _get_system_prompt(self, current_datetime: datetime) -> str:
         """获取系统提示词，包含当前时间信息"""
@@ -241,8 +324,17 @@ class DeepSeekService:
                 "max_tokens": 50
             }
             
-            # 发送 API 请求
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            # 发送 API 请求，优化超时设置
+            timeout_config = httpx.Timeout(
+                connect=3.0,  # 连接超时3秒
+                read=10.0,    # 读取超时10秒
+                write=5.0,    # 写入超时5秒
+                pool=15.0     # 连接池超时15秒
+            )
+            async with httpx.AsyncClient(
+                timeout=timeout_config,
+                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+            ) as client:
                 response = await client.post(
                     self.api_url,
                     headers=headers,
@@ -355,6 +447,12 @@ class DeepSeekService:
     async def parse_tasks(self, text: str) -> List[TaskCreate]:
         """解析自然语言文本为任务列表"""
         try:
+            # 检查缓存
+            cache_key = self._get_cache_key(text, "parse_tasks")
+            cached_result = self._get_cached_result(cache_key)
+            if cached_result is not None:
+                return cached_result
+            
             # 获取当前时间
             current_datetime = datetime.now()
             
@@ -381,96 +479,88 @@ class DeepSeekService:
                 "max_tokens": 1000
             }
             
-            # 发送 API 请求
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    self.api_url,
-                    headers=headers,
-                    json=payload
-                )
-                
-                if response.status_code != 200:
-                    raise Exception(f"DeepSeek API 请求失败: {response.status_code} - {response.text}")
-                
-                result = response.json()
-                
-                # 提取 AI 回复内容
-                if "choices" not in result or not result["choices"]:
-                    raise Exception("DeepSeek API 返回格式错误")
-                
-                content = result["choices"][0]["message"]["content"].strip()
-                
-                # 解析 JSON 响应
+            # 使用重试机制发送 API 请求
+            result = await self._make_api_request_with_retry(payload, headers)
+            
+            # 提取 AI 回复内容
+            if "choices" not in result or not result["choices"]:
+                raise Exception("DeepSeek API 返回格式错误")
+            
+            content = result["choices"][0]["message"]["content"].strip()
+            
+            # 解析 JSON 响应
+            try:
+                tasks_data = json.loads(content)
+            except json.JSONDecodeError:
+                # 如果 JSON 解析失败，尝试提取 JSON 部分
+                import re
+                json_match = re.search(r'\[.*\]', content, re.DOTALL)
+                if json_match:
+                    tasks_data = json.loads(json_match.group())
+                else:
+                    raise Exception(f"无法解析 AI 返回的 JSON: {content}")
+            
+            # 转换为 TaskCreate 对象
+            tasks = []
+            for task_data in tasks_data:
                 try:
-                    tasks_data = json.loads(content)
-                except json.JSONDecodeError:
-                    # 如果 JSON 解析失败，尝试提取 JSON 部分
-                    import re
-                    json_match = re.search(r'\[.*\]', content, re.DOTALL)
-                    if json_match:
-                        tasks_data = json.loads(json_match.group())
-                    else:
-                        raise Exception(f"无法解析 AI 返回的 JSON: {content}")
-                
-                # 转换为 TaskCreate 对象
-                tasks = []
-                for task_data in tasks_data:
-                    try:
-                        # 解析时间
-                        start_time = datetime.fromisoformat(task_data["start"])
-                        end_time = None
-                        if task_data.get("end"):
-                            end_time = datetime.fromisoformat(task_data["end"])
-                        
-                        # 解析优先级
-                        priority_str = task_data.get("priority", "medium").lower()
-                        if priority_str in ["high", "medium", "low"]:
-                            priority = TaskPriority(priority_str)
-                        else:
-                            priority = TaskPriority.MEDIUM
-                        
-                        # 处理重复规则
-                        is_recurring = task_data.get("is_recurring", False)
-                        recurrence_rule = None
-                        
-                        if is_recurring and "recurrence_rule" in task_data:
-                            rule_data = task_data["recurrence_rule"]
-                            from app.models.task import RecurrenceRule, RecurrenceFrequency
-                            
-                            # 解析频率
-                            frequency_str = rule_data.get("frequency", "weekly").lower()
-                            frequency = RecurrenceFrequency.WEEKLY  # 默认值
-                            if frequency_str == "daily":
-                                frequency = RecurrenceFrequency.DAILY
-                            elif frequency_str == "weekly":
-                                frequency = RecurrenceFrequency.WEEKLY
-                            elif frequency_str == "monthly":
-                                frequency = RecurrenceFrequency.MONTHLY
-                            elif frequency_str == "yearly":
-                                frequency = RecurrenceFrequency.YEARLY
-                            
-                            recurrence_rule = RecurrenceRule(
-                                frequency=frequency,
-                                interval=rule_data.get("interval", 1),
-                                days_of_week=rule_data.get("days_of_week", []),
-                                end_date=None  # 暂时不处理结束日期
-                            )
-                        
-                        task = TaskCreate(
-                            title=task_data["title"],
-                            start=start_time,
-                            end=end_time,
-                            priority=priority,
-                            is_recurring=is_recurring,
-                            recurrence_rule=recurrence_rule
-                        )
-                        tasks.append(task)
+                    # 解析时间
+                    start_time = datetime.fromisoformat(task_data["start"])
+                    end_time = None
+                    if task_data.get("end"):
+                        end_time = datetime.fromisoformat(task_data["end"])
                     
-                    except Exception as e:
-                        print(f"解析单个任务失败: {e}, 任务数据: {task_data}")
-                        continue
+                    # 解析优先级
+                    priority_str = task_data.get("priority", "medium").lower()
+                    if priority_str in ["high", "medium", "low"]:
+                        priority = TaskPriority(priority_str)
+                    else:
+                        priority = TaskPriority.MEDIUM
+                    
+                    # 处理重复规则
+                    is_recurring = task_data.get("is_recurring", False)
+                    recurrence_rule = None
+                    
+                    if is_recurring and "recurrence_rule" in task_data:
+                        rule_data = task_data["recurrence_rule"]
+                        from app.models.task import RecurrenceRule, RecurrenceFrequency
+                        
+                        # 解析频率
+                        frequency_str = rule_data.get("frequency", "weekly").lower()
+                        frequency = RecurrenceFrequency.WEEKLY  # 默认值
+                        if frequency_str == "daily":
+                            frequency = RecurrenceFrequency.DAILY
+                        elif frequency_str == "weekly":
+                            frequency = RecurrenceFrequency.WEEKLY
+                        elif frequency_str == "monthly":
+                            frequency = RecurrenceFrequency.MONTHLY
+                        elif frequency_str == "yearly":
+                            frequency = RecurrenceFrequency.YEARLY
+                        
+                        recurrence_rule = RecurrenceRule(
+                            frequency=frequency,
+                            interval=rule_data.get("interval", 1),
+                            days_of_week=rule_data.get("days_of_week", []),
+                            end_date=None  # 暂时不处理结束日期
+                        )
+                    
+                    task = TaskCreate(
+                        title=task_data["title"],
+                        start=start_time,
+                        end=end_time,
+                        priority=priority,
+                        is_recurring=is_recurring,
+                        recurrence_rule=recurrence_rule
+                    )
+                    tasks.append(task)
                 
-                return tasks
+                except Exception as e:
+                    print(f"解析单个任务失败: {e}, 任务数据: {task_data}")
+                    continue
+            
+            # 缓存结果
+            self._set_cache_result(cache_key, tasks)
+            return tasks
         
         except Exception as e:
             print(f"DeepSeek API 调用失败: {e}")
@@ -743,6 +833,12 @@ class DeepSeekService:
     async def analyze_schedule(self, description: str, existing_tasks: List[Dict[str, Any]]) -> tuple[WorkInfo, List[TimeSlot]]:
         """分析工作描述并推荐时间段，返回解析的工作信息和推荐时间段"""
         try:
+            # 检查缓存
+            cache_key = self._get_cache_key(f"{description}:{len(existing_tasks)}", "analyze_schedule")
+            cached_result = self._get_cached_result(cache_key)
+            if cached_result is not None:
+                return cached_result
+            
             # 首先解析工作描述，提取工作信息
             work_info = await self._parse_work_description(description)
             
@@ -780,9 +876,18 @@ class DeepSeekService:
                     "max_tokens": 1500
                 }
                 
-                # 发送 API 请求，设置合理的超时时间
+                # 发送 API 请求，优化超时设置和连接池
                 print(f"正在向 DeepSeek API 发送请求: {self.api_url}")
-                async with httpx.AsyncClient(timeout=60.0) as client:
+                timeout_config = httpx.Timeout(
+                    connect=5.0,  # 连接超时5秒
+                    read=15.0,    # 读取超时15秒
+                    write=10.0,   # 写入超时10秒
+                    pool=30.0     # 连接池超时30秒
+                )
+                async with httpx.AsyncClient(
+                    timeout=timeout_config,
+                    limits=httpx.Limits(max_keepalive_connections=10, max_connections=20)
+                ) as client:
                     response = await client.post(
                         self.api_url,
                         headers=headers,
@@ -833,7 +938,10 @@ class DeepSeekService:
                             
                             if time_slots:
                                 print(f"✅ DeepSeek API 分析成功！返回 {len(time_slots)} 个智能推荐时间段")
-                                return work_info, time_slots
+                                # 缓存结果
+                                result = (work_info, time_slots)
+                                self._set_cache_result(cache_key, result)
+                                return result
                             else:
                                 print("⚠️ DeepSeek API 返回了空的时间段列表")
                     else:
@@ -853,7 +961,10 @@ class DeepSeekService:
             print("🤖 使用本地智能算法进行日程分析...")
             time_slots = await self._fallback_schedule_analysis(work_info, existing_tasks)
             print(f"✅ 本地算法分析完成，返回 {len(time_slots)} 个推荐时间段")
-            return work_info, time_slots
+            # 缓存结果
+            result = (work_info, time_slots)
+            self._set_cache_result(cache_key, result)
+            return result
             
             # 以下是原来的API调用代码，暂时注释掉
             # # 获取当前时间
@@ -1471,3 +1582,49 @@ class DeepSeekService:
         except Exception as e:
             print(f"备用任务匹配失败: {e}")
             return []
+    
+    async def delete_tasks_by_description(self, description: str, user_id: str = None) -> List[Task]:
+        """根据自然语言描述删除任务"""
+        try:
+            from ..services.task_service import TaskService
+            from ..utils.database import get_database
+            
+            # 获取数据库连接
+            db = await get_database()
+            task_service = TaskService(db)
+            
+            # 获取用户的所有任务
+            if user_id:
+                existing_tasks = await task_service.get_tasks_by_user(user_id)
+            else:
+                # 如果没有用户ID，获取所有任务（用于兼容性）
+                existing_tasks = await task_service.get_all_tasks()
+            
+            if not existing_tasks:
+                print("没有找到任何任务")
+                return []
+            
+            # 使用AI匹配要删除的任务
+            matched_task_ids = await self.match_tasks_for_deletion(description, existing_tasks)
+            
+            if not matched_task_ids:
+                print(f"根据描述 '{description}' 没有找到匹配的任务")
+                return []
+            
+            # 删除匹配的任务
+            deleted_tasks = []
+            for task_id in matched_task_ids:
+                try:
+                    deleted_task = await task_service.delete_task(task_id)
+                    if deleted_task:
+                        deleted_tasks.append(deleted_task)
+                        print(f"成功删除任务: {deleted_task.title}")
+                except Exception as e:
+                    print(f"删除任务 {task_id} 失败: {e}")
+            
+            print(f"总共删除了 {len(deleted_tasks)} 个任务")
+            return deleted_tasks
+            
+        except Exception as e:
+            print(f"删除任务失败: {e}")
+            raise Exception(f"删除任务失败: {str(e)}")

@@ -24,7 +24,17 @@ class TaskService:
         # 添加缓存机制 - 按用户ID缓存
         self._cache = {}
         self._cache_timestamp = {}
-        self._cache_ttl = 30  # 缓存30秒
+        self._cache_ttl = 60  # 扩展缓存时间到60秒
+        
+        # 查询结果缓存
+        self._query_cache = {}
+        self._query_cache_timestamp = {}
+        self._query_cache_ttl = 30  # 查询缓存30秒
+        
+        # 文件数据缓存：避免频繁文件I/O
+        self._file_data_cache = None
+        self._file_cache_timestamp = None
+        self._file_cache_ttl = 10  # 文件缓存10秒
         
         # 如果数据文件不存在，创建初始结构
         if not self.data_file.exists():
@@ -42,10 +52,20 @@ class TaskService:
         self._save_data(initial_data)
     
     def _load_data(self) -> Dict[str, Any]:
-        """从文件加载数据"""
+        """从文件加载数据（带缓存优化）"""
+        # 检查文件缓存是否有效
+        if (self._file_data_cache is not None and 
+            self._file_cache_timestamp is not None and
+            (datetime.now() - self._file_cache_timestamp).total_seconds() < self._file_cache_ttl):
+            return self._file_data_cache
+        
         try:
             with open(self.data_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
+                # 更新文件缓存
+                self._file_data_cache = data
+                self._file_cache_timestamp = datetime.now()
+                return data
         except (FileNotFoundError, json.JSONDecodeError):
             # 如果文件损坏或不存在，重新初始化
             self._init_data_file()
@@ -67,13 +87,44 @@ class TaskService:
             with open(self.data_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             
-            # 清除所有用户的缓存，因为数据已更改
+            # 清除所有缓存，因为数据已更改
             self._cache = {}
             self._cache_timestamp = {}
+            self._query_cache = {}
+            self._query_cache_timestamp = {}
+            self._file_data_cache = None
+            self._file_cache_timestamp = None
         except Exception as e:
             print(f"保存数据失败: {e}")
             print(f"数据结构: {data}")
             raise
+    
+    def _get_query_cache_key(self, method_name: str, user_id: str, **kwargs) -> str:
+        """生成查询缓存键"""
+        import hashlib
+        key_data = f"{method_name}:{user_id}:{str(sorted(kwargs.items()))}"
+        return hashlib.md5(key_data.encode()).hexdigest()
+    
+    def _get_query_cache(self, cache_key: str):
+        """获取查询缓存"""
+        if cache_key not in self._query_cache:
+            return None
+        
+        # 检查缓存是否过期
+        if cache_key in self._query_cache_timestamp:
+            cache_time = self._query_cache_timestamp[cache_key]
+            if (datetime.now() - cache_time).total_seconds() > self._query_cache_ttl:
+                # 缓存过期，删除
+                del self._query_cache[cache_key]
+                del self._query_cache_timestamp[cache_key]
+                return None
+        
+        return self._query_cache[cache_key]
+    
+    def _set_query_cache(self, cache_key: str, result):
+        """设置查询缓存"""
+        self._query_cache[cache_key] = result
+        self._query_cache_timestamp[cache_key] = datetime.now()
     
     def _generate_task_id(self) -> str:
         """生成唯一的任务ID"""
@@ -296,11 +347,19 @@ class TaskService:
     
     async def get_all_tasks(self, user_id: str) -> List[Task]:
         """获取指定用户的所有任务（带缓存优化）"""
+        # 检查查询缓存
+        cache_key = self._get_query_cache_key("get_all_tasks", user_id)
+        cached_result = self._get_query_cache(cache_key)
+        if cached_result is not None:
+            return cached_result
+        
         # 检查缓存是否有效
         current_time = datetime.now()
         if (user_id in self._cache and 
             user_id in self._cache_timestamp and 
             (current_time - self._cache_timestamp[user_id]).total_seconds() < self._cache_ttl):
+            # 设置查询缓存
+            self._set_query_cache(cache_key, self._cache[user_id])
             return self._cache[user_id]
         
         # 缓存失效，重新加载数据
@@ -330,6 +389,9 @@ class TaskService:
         # 更新缓存
         self._cache[user_id] = tasks
         self._cache_timestamp[user_id] = current_time
+        
+        # 设置查询缓存
+        self._set_query_cache(cache_key, tasks)
         
         return tasks
     
@@ -453,6 +515,121 @@ class TaskService:
         
         return deleted_tasks
     
+    async def batch_create_tasks(self, tasks_create: List[TaskCreate], user_id: str) -> List[Task]:
+        """批量创建任务，优化数据库保存性能"""
+        now = datetime.now()
+        created_tasks = []
+        
+        # 加载数据一次
+        data = self._load_data()
+        
+        # 确保用户数据结构存在
+        if user_id not in data["users"]:
+            data["users"][user_id] = {"tasks": []}
+        
+        # 批量创建任务
+        for task_create in tasks_create:
+            task = Task(
+                id=self._generate_task_id(),
+                title=task_create.title,
+                start=task_create.start,
+                end=task_create.end,
+                priority=task_create.priority or TaskPriority.MEDIUM,
+                recurrence_rule=task_create.recurrence_rule,
+                is_recurring=task_create.is_recurring,
+                parent_task_id=task_create.parent_task_id,
+                reminder_type=task_create.reminder_type,
+                is_important=task_create.is_important,
+                reminder_sent=False,
+                created_at=now,
+                updated_at=now
+            )
+            
+            data["users"][user_id]["tasks"].append(self._task_to_dict(task))
+            created_tasks.append(task)
+            
+            # 如果是重复任务，生成未来的实例
+            if task.is_recurring and task.recurrence_rule:
+                recurring_tasks = self._generate_recurring_tasks(task)
+                for recurring_task in recurring_tasks:
+                    data["users"][user_id]["tasks"].append(self._task_to_dict(recurring_task))
+        
+        # 只保存一次数据
+        self._save_data(data)
+        
+        return created_tasks
+    
+    async def batch_delete_tasks(self, task_ids: List[str], user_id: str) -> List[str]:
+        """批量删除任务，优化数据库保存性能"""
+        data = self._load_data()
+        
+        # 检查用户是否存在
+        if user_id not in data["users"] or "tasks" not in data["users"][user_id]:
+            return []
+        
+        deleted_ids = []
+        tasks_to_keep = []
+        
+        # 筛选要保留的任务
+        for task_dict in data["users"][user_id]["tasks"]:
+            if task_dict["id"] in task_ids:
+                deleted_ids.append(task_dict["id"])
+            else:
+                tasks_to_keep.append(task_dict)
+        
+        # 更新任务列表
+        data["users"][user_id]["tasks"] = tasks_to_keep
+        
+        # 只保存一次数据
+        self._save_data(data)
+        
+        return deleted_ids
+    
+    async def batch_update_tasks(self, updates: List[tuple[str, TaskUpdate]], user_id: str) -> List[Task]:
+        """批量更新任务，优化数据库保存性能"""
+        data = self._load_data()
+        
+        # 检查用户是否存在
+        if user_id not in data["users"] or "tasks" not in data["users"][user_id]:
+            return []
+        
+        updated_tasks = []
+        now = datetime.now()
+        
+        # 创建更新映射
+        update_map = {task_id: task_update for task_id, task_update in updates}
+        
+        # 批量更新任务
+        for i, task_dict in enumerate(data["users"][user_id]["tasks"]):
+            if task_dict["id"] in update_map:
+                task_update = update_map[task_dict["id"]]
+                
+                # 更新字段
+                if task_update.title is not None:
+                    task_dict["title"] = task_update.title
+                if task_update.start is not None:
+                    task_dict["start"] = task_update.start.isoformat()
+                if task_update.end is not None:
+                    task_dict["end"] = task_update.end.isoformat()
+                if task_update.priority is not None:
+                    task_dict["priority"] = task_update.priority.value
+                if task_update.reminder_type is not None:
+                    task_dict["reminder_type"] = task_update.reminder_type
+                if task_update.is_important is not None:
+                    task_dict["is_important"] = task_update.is_important
+                
+                # 更新时间戳
+                task_dict["updated_at"] = now.isoformat()
+                
+                # 更新数据
+                data["users"][user_id]["tasks"][i] = task_dict
+                updated_tasks.append(self._dict_to_task(task_dict))
+        
+        # 只保存一次数据
+        self._save_data(data)
+        
+        return updated_tasks
+    
     async def delete_tasks_by_week(self, target_date: datetime, user_id: str) -> List[Task]:
         """删除指定用户在指定日期所在周的所有任务"""
         print(f"[DEBUG] delete_tasks_by_week 接收到的日期: {target_date}")
@@ -509,3 +686,36 @@ class TaskService:
                 deleted_tasks.append(task)
         
         return deleted_tasks
+    
+    async def get_upcoming_tasks(self, user_id: str, days: int = 7) -> List[Task]:
+        """获取即将到来的任务"""
+        try:
+            # 检查查询缓存
+            cache_key = self._get_query_cache_key("get_upcoming_tasks", user_id, days=days)
+            cached_result = self._get_query_cache(cache_key)
+            if cached_result is not None:
+                return cached_result
+            
+            all_tasks = await self.get_all_tasks(user_id)
+            now = datetime.now()
+            upcoming_date = now + timedelta(days=days)
+            
+            upcoming_tasks = []
+            for task in all_tasks:
+                # 检查任务的开始时间
+                if task.start and task.start <= upcoming_date and task.start >= now:
+                    upcoming_tasks.append(task)
+                # 检查任务的结束时间
+                elif task.end and task.end <= upcoming_date and task.end >= now:
+                    upcoming_tasks.append(task)
+            
+            # 按时间排序
+            upcoming_tasks.sort(key=lambda x: x.start or x.end or now)
+            
+            # 设置查询缓存
+            self._set_query_cache(cache_key, upcoming_tasks)
+            
+            return upcoming_tasks
+        except Exception as e:
+            print(f"获取即将到来的任务失败: {e}")
+            return []

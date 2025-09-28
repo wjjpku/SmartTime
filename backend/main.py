@@ -12,15 +12,40 @@ SmartTime - FastAPI 后端主入口
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import tasks, schedule, auth
+from app.services.async_task_queue import task_queue
+import logging
+import asyncio
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+logger = logging.getLogger(__name__)
 
 # 创建 FastAPI 应用实例
 app = FastAPI(
     title="SmartTime API",
-    description="基于自然语言处理的任务管理系统后端服务",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    description="智能时间管理系统后端 API",
+    version="1.0.0"
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时的事件处理"""
+    logger.info("正在启动 SmartTime API...")
+    # 启动异步任务队列
+    await task_queue.start()
+    logger.info("异步任务队列已启动")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭时的事件处理"""
+    logger.info("正在关闭 SmartTime API...")
+    # 停止异步任务队列
+    await task_queue.stop()
+    logger.info("异步任务队列已停止")
 
 # 配置 CORS 中间件，允许前端跨域访问
 app.add_middleware(

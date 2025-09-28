@@ -12,7 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../components/NotificationManager';
 import { supabase } from '../lib/supabase';
 // import TaskReminder from '../components/TaskReminder'; // 已禁用提醒功能
-import TaskFilter from '../components/TaskFilter';
+
 import DataExport from '../components/DataExport';
 import UserGuide from '../components/UserGuide';
 import RealtimeClock, { getRelativeTimeLabel, isToday, isThisWeek } from '../components/RealtimeClock';
@@ -27,7 +27,6 @@ export default function Home() {
   });
   const calendarRef = useRef<FullCalendar>(null);
   const [inputText, setInputText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'delete'>('create');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -36,16 +35,12 @@ export default function Home() {
   
   // 智能日程安排相关状态
   const [scheduleInput, setScheduleInput] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [scheduleResults, setScheduleResults] = useState<any>(null);
   const [showScheduleResults, setShowScheduleResults] = useState(false);
   const [originalInputText, setOriginalInputText] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteType, setDeleteType] = useState<'day' | 'week' | 'month'>('day');
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [showFilter, setShowFilter] = useState(false);
-  const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);
-  const [isFiltering, setIsFiltering] = useState(false);
+
   const [showExport, setShowExport] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [currentView, setCurrentView] = useState('dayGridMonth');
@@ -70,7 +65,7 @@ export default function Home() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   
-  const { tasks, fetchTasks, parseAndCreateTasks, deleteTask, batchDeleteTasks, analyzeSchedule } = taskStore();
+  const { tasks, loadingStates, fetchTasks, parseAndCreateTasks, deleteTask, batchDeleteTasks, analyzeSchedule } = taskStore();
 
   useEffect(() => {
     fetchTasks();
@@ -83,6 +78,68 @@ export default function Home() {
       }, 1000); // 延迟1秒显示，让用户先看到界面
     }
   }, [fetchTasks]);
+
+  // 监听tasks状态变化，确保日历自动更新
+  // 计算日历事件数据
+  const getDisplayTasks = () => {
+    return tasks;
+  };
+
+  const calendarEvents = getDisplayTasks().map(task => {
+    // 基础颜色根据优先级
+    let backgroundColor = task.priority === 'high' ? '#ef4444' : 
+                         task.priority === 'medium' ? '#f59e0b' : '#10b981';
+    let borderColor = task.priority === 'high' ? '#dc2626' : 
+                     task.priority === 'medium' ? '#d97706' : '#059669';
+    
+    // 重复任务使用渐变色和特殊边框
+    if (task.is_recurring) {
+      backgroundColor = task.priority === 'high' ? '#f87171' : 
+                       task.priority === 'medium' ? '#fbbf24' : '#34d399';
+      borderColor = '#6366f1'; // 紫色边框表示重复任务
+    }
+    
+    // 生成带有相对时间标识的标题
+    const taskDate = new Date(task.start);
+    const relativeTimeLabel = getRelativeTimeLabel(taskDate);
+    let displayTitle = task.title;
+    
+    // 为任务添加相对时间标识
+    if (relativeTimeLabel && relativeTimeLabel !== '其他') {
+      displayTitle = `${relativeTimeLabel} ${task.title}`;
+    }
+    
+    // 添加重复任务标识
+    if (task.is_recurring) {
+      displayTitle = `🔄 ${displayTitle}`;
+    }
+    
+    return {
+      id: task.id,
+      title: displayTitle,
+      start: task.start,
+      end: task.end,
+      backgroundColor,
+      borderColor,
+      borderWidth: task.is_recurring ? 2 : 1,
+      extendedProps: {
+        isRecurring: task.is_recurring,
+        recurrenceRule: task.recurrence_rule,
+        parentTaskId: task.parent_task_id,
+        relativeTime: relativeTimeLabel
+      }
+    };
+  });
+
+  useEffect(() => {
+    // 当tasks数据发生变化时，强制日历重新渲染
+    if (calendarRef.current) {
+      const calendarApi = calendarRef.current.getApi();
+      // 通过重新设置事件源来触发日历更新
+      calendarApi.removeAllEvents();
+      calendarApi.addEventSource(calendarEvents);
+    }
+  }, [tasks, calendarEvents]);
 
   // 监听用户数据变化，确保实时更新显示
   useEffect(() => {
@@ -380,16 +437,13 @@ export default function Home() {
       return;
     }
 
-    setIsLoading(true);
     const currentInputText = inputText;
     try {
       const newTasks = await parseAndCreateTasks(inputText);
       setInputText('');
       
-      // 刷新任务列表以确保显示所有重复任务实例
-      await fetchTasks();
-      
-      // 显示任务创建结果
+      // parseAndCreateTasks内部已经调用了fetchTasks()，无需重复调用
+      // 直接显示任务创建结果
       setCreatedTasks(newTasks);
       setOriginalInputText(currentInputText);
       setShowResultModal(true);
@@ -397,8 +451,6 @@ export default function Home() {
       showSuccess('任务创建成功', `成功创建了 ${newTasks.length} 个任务！`);
     } catch (error) {
       showError('创建失败', '任务创建失败，请检查输入内容并重试');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -425,7 +477,6 @@ export default function Home() {
   };
 
   const confirmBatchDelete = async () => {
-    setIsDeleting(true);
     try {
       // 根据删除类型选择合适的日期
       let targetDate;
@@ -500,7 +551,6 @@ export default function Home() {
       
       showError('删除失败', errorMessage);
     } finally {
-      setIsDeleting(false);
       setShowDeleteConfirm(false);
     }
   };
@@ -511,8 +561,6 @@ export default function Home() {
       showError('请输入工作描述');
       return;
     }
-
-    setIsAnalyzing(true);
     
     try {
       const result = await analyzeSchedule(scheduleInput);
@@ -527,8 +575,6 @@ export default function Home() {
     } catch (error: any) {
       console.error('智能日程分析错误:', error);
       showError('分析失败，请重试');
-    } finally {
-      setIsAnalyzing(false);
     }
   };
 
@@ -671,67 +717,9 @@ export default function Home() {
     setShowModal(true);
   };
 
-  // 处理筛选结果
-  const handleFilteredTasks = (filtered: Task[]) => {
-    setFilteredTasks(filtered);
-    setIsFiltering(filtered.length !== tasks.length);
-  };
 
-  // 切换筛选面板
-  const toggleFilter = () => {
-    setShowFilter(!showFilter);
-  };
 
-  // 获取要显示的任务（筛选后的或全部）
-  const getDisplayTasks = () => {
-    return isFiltering ? filteredTasks : tasks;
-  };
 
-  const calendarEvents = getDisplayTasks().map(task => {
-    // 基础颜色根据优先级
-    let backgroundColor = task.priority === 'high' ? '#ef4444' : 
-                         task.priority === 'medium' ? '#f59e0b' : '#10b981';
-    let borderColor = task.priority === 'high' ? '#dc2626' : 
-                     task.priority === 'medium' ? '#d97706' : '#059669';
-    
-    // 重复任务使用渐变色和特殊边框
-    if (task.is_recurring) {
-      backgroundColor = task.priority === 'high' ? '#f87171' : 
-                       task.priority === 'medium' ? '#fbbf24' : '#34d399';
-      borderColor = '#6366f1'; // 紫色边框表示重复任务
-    }
-    
-    // 生成带有相对时间标识的标题
-    const taskDate = new Date(task.start);
-    const relativeTimeLabel = getRelativeTimeLabel(taskDate);
-    let displayTitle = task.title;
-    
-    // 为任务添加相对时间标识
-    if (relativeTimeLabel && relativeTimeLabel !== '其他') {
-      displayTitle = `${relativeTimeLabel} ${task.title}`;
-    }
-    
-    // 添加重复任务标识
-    if (task.is_recurring) {
-      displayTitle = `🔄 ${displayTitle}`;
-    }
-    
-    return {
-      id: task.id,
-      title: displayTitle,
-      start: task.start,
-      end: task.end,
-      backgroundColor,
-      borderColor,
-      borderWidth: task.is_recurring ? 2 : 1,
-      extendedProps: {
-        isRecurring: task.is_recurring,
-        recurrenceRule: task.recurrence_rule,
-        parentTaskId: task.parent_task_id,
-        relativeTime: relativeTimeLabel
-      }
-    };
-  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -881,7 +869,7 @@ export default function Home() {
                 placeholder="描述您的工作内容，AI将为您智能安排时间...\n例如：明天需要完成项目报告，大概需要3小时"
                 className="w-full px-4 py-3 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
                 rows={3}
-                disabled={isAnalyzing}
+                disabled={loadingStates.analyzing}
               />
               <div className="absolute bottom-2 right-2 text-xs text-gray-400">
                 {scheduleInput.length}/500
@@ -891,10 +879,10 @@ export default function Home() {
             <button
               type="button"
               onClick={handleScheduleAnalyze}
-              disabled={isAnalyzing || !scheduleInput.trim()}
+              disabled={loadingStates.analyzing || !scheduleInput.trim()}
               className="w-full bg-gradient-to-r from-purple-500 to-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:from-purple-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
             >
-              {isAnalyzing ? (
+              {loadingStates.analyzing ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
                   <span>AI智能分析中...</span>
@@ -1021,7 +1009,7 @@ export default function Home() {
                     'border-gray-200 focus:ring-blue-500 focus:border-blue-500'
                   }`}
                   rows={4}
-                  disabled={isLoading}
+                  disabled={loadingStates.parsing}
                   maxLength={100}
                 />
                 <div className={`absolute bottom-3 right-3 text-xs font-medium ${
@@ -1039,10 +1027,10 @@ export default function Home() {
               {/* AI智能解析按钮 - 占约1/2宽度 */}
               <button
                 type="submit"
-                disabled={isLoading || !inputText.trim()}
+                disabled={loadingStates.parsing || !inputText.trim()}
                 className="flex-[2] px-6 py-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center gap-3 shadow-lg font-semibold transform hover:-translate-y-1 active:scale-95"
               >
-                {isLoading ? (
+                {loadingStates.parsing ? (
                   <>
                     <Loader2 className="animate-spin" size={20} />
                     <span>AI 解析中...</span>
@@ -1182,6 +1170,24 @@ export default function Home() {
           </div>
           <div className="p-3 sm:p-6">
             <style>{`
+              .fc-refreshButton-button {
+                background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+                border: none !important;
+                color: white !important;
+                border-radius: 8px !important;
+                padding: 8px 16px !important;
+                font-weight: 500 !important;
+                transition: all 0.2s ease !important;
+                box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2) !important;
+              }
+              .fc-refreshButton-button:hover {
+                background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+                transform: translateY(-1px) !important;
+                box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3) !important;
+              }
+              .fc-refreshButton-button:active {
+                transform: translateY(0) !important;
+              }
               .fc-deleteButton-button {
                 background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
                 border: none !important;
@@ -1205,15 +1211,28 @@ export default function Home() {
             ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView="dayGridMonth"
-            initialDate="2025-01-27"
+            initialDate={new Date().toISOString().split('T')[0]}
             headerToolbar={{
               left: 'prev,next today',
               center: 'title',
-              right: isMobile ? 'dayGridMonth exportButton' : 'dayGridMonth,timeGridWeek,timeGridDay exportButton filterButton deleteButton'
+              right: isMobile ? 'dayGridMonth exportButton' : 'dayGridMonth,timeGridWeek,timeGridDay refreshButton exportButton deleteButton'
             }}
 
 
             customButtons={{
+              refreshButton: {
+                text: '刷新',
+                click: async () => {
+                  try {
+                    await fetchTasks(true); // 强制刷新
+                    toast.success('日程已刷新');
+                  } catch (error) {
+                    console.error('刷新失败:', error);
+                    toast.error('刷新失败，请稍后重试');
+                  }
+                }
+              },
+              
               exportButton: {
                 text: isMobile ? '⋯' : '导出',
                 click: () => {
@@ -1223,8 +1242,9 @@ export default function Home() {
                     menu.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end';
                     menu.innerHTML = `
                       <div class="bg-white w-full rounded-t-xl p-4 space-y-3">
+                        <button class="w-full py-3 px-4 bg-green-600 text-white rounded-lg" onclick="document.querySelector('[data-action=refresh]').click(); this.closest('.fixed').remove();">刷新日程</button>
                         <button class="w-full py-3 px-4 bg-blue-600 text-white rounded-lg" onclick="document.querySelector('[data-action=export]').click(); this.closest('.fixed').remove();">导出数据</button>
-                        <button class="w-full py-3 px-4 bg-gray-600 text-white rounded-lg" onclick="document.querySelector('[data-action=filter]').click(); this.closest('.fixed').remove();">筛选任务</button>
+        
                         <button class="w-full py-3 px-4 bg-red-600 text-white rounded-lg" onclick="document.querySelector('[data-action=delete]').click(); this.closest('.fixed').remove();">删除任务</button>
                         <button class="w-full py-3 px-4 bg-gray-300 text-gray-700 rounded-lg" onclick="this.closest('.fixed').remove();">取消</button>
                       </div>
@@ -1235,10 +1255,7 @@ export default function Home() {
                   }
                 }
               },
-              filterButton: {
-                text: '筛选',
-                click: toggleFilter
-              },
+
               deleteButton: {
                 text: '', // 初始为空，由useEffect动态更新
                 click: () => {
@@ -1395,15 +1412,25 @@ export default function Home() {
         
         {/* 隐藏的功能按钮，用于移动端菜单调用 */}
         <button 
+          data-action="refresh" 
+          className="hidden" 
+          onClick={async () => {
+            try {
+              await fetchTasks(true);
+              toast.success('日程已刷新');
+            } catch (error) {
+              console.error('刷新失败:', error);
+              toast.error('刷新失败，请稍后重试');
+            }
+          }}
+        />
+        
+        <button 
           data-action="export" 
           className="hidden" 
           onClick={() => setShowExport(true)}
         />
-        <button 
-          data-action="filter" 
-          className="hidden" 
-          onClick={toggleFilter}
-        />
+
         <button 
           data-action="delete" 
           className="hidden" 
@@ -1413,18 +1440,7 @@ export default function Home() {
           }}
         />
 
-        {/* 任务筛选面板 */}
-        {showFilter && (
-          <div className="mt-6">
-            <TaskFilter
-              tasks={tasks}
-              onFilteredTasks={handleFilteredTasks}
-              onClose={() => setShowFilter(false)}
-              isVisible={showFilter}
-              onToggle={toggleFilter}
-            />
-          </div>
-        )}
+
       </div>
 
       {/* 统一任务模态框 */}
@@ -1439,7 +1455,8 @@ export default function Home() {
           onSave={() => {
             setShowModal(false);
             setSelectedTask(null);
-            fetchTasks();
+            // 移除fetchTasks()调用，因为taskStore的createTask/updateTask/deleteTask方法
+            // 已经进行了乐观更新，无需重复刷新数据
           }}
         />
       )}
@@ -1477,17 +1494,17 @@ export default function Home() {
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                disabled={isDeleting}
+                disabled={loadingStates.batchOperating}
                 className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 取消
               </button>
               <button
                 onClick={confirmBatchDelete}
-                disabled={isDeleting}
+                disabled={loadingStates.batchOperating}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
-                {isDeleting ? (
+                {loadingStates.batchOperating ? (
                   <>
                     <Loader2 className="animate-spin" size={16} />
                     删除中...
